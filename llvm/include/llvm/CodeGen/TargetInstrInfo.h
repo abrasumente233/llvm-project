@@ -110,6 +110,10 @@ public:
     return Opc <= TargetOpcode::GENERIC_OP_END;
   }
 
+  virtual bool isPotentiallyCompressible(const MachineInstr &MI, const VirtRegMap &VRM) const {
+    return false;
+  }
+
   static bool isGenericAtomicRMWOpcode(unsigned Opc) {
     return Opc >= TargetOpcode::GENERIC_ATOMICRMW_OP_START &&
            Opc <= TargetOpcode::GENERIC_ATOMICRMW_OP_END;

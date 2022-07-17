@@ -46,6 +46,8 @@ class RISCVInstrInfo : public RISCVGenInstrInfo {
 public:
   explicit RISCVInstrInfo(RISCVSubtarget &STI);
 
+  virtual bool isPotentiallyCompressible(const MachineInstr &MI, const VirtRegMap &VRM) const override;
+
   MCInst getNop() const override;
   const MCInstrDesc &getBrCond(RISCVCC::CondCode CC) const;
 
