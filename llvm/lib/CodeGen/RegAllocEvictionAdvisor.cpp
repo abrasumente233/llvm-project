@@ -176,11 +176,11 @@ bool DefaultEvictionAdvisor::canEvictHintInterference(
 
 float getCompressibleWeight(const LiveInterval &VirtReg,
                             const MachineRegisterInfo *MRI,
-                            const VirtRegMap *VRM) {
+                            const RegToPhysFunction& RTPF) {
   int Weight = 0;
   for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
     const auto &TII = MI.getMF()->getSubtarget().getInstrInfo();
-    bool Compressible = TII->isPotentiallyCompressible(MI, *VRM);
+    bool Compressible = TII->isPotentiallyCompressible(MI, RTPF);
     if (Compressible) {
       Weight += 1;
     } else {
@@ -258,7 +258,12 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
   // anything, and it can be evicted by anything.
   unsigned Cascade = RA.getExtraInfo().getCascadeOrCurrentNext(VirtReg.reg());
 
-  MaxCost.CompressibleWeight = getCompressibleWeight(VirtReg, MRI, VRM);
+  // We need to check how well our input would fulfill everything
+  // *if we assigned it*
+  auto CurrentReg = VirtReg.reg();
+  assert(VirtReg.reg().isVirtual() && "Reg was not virtual");
+  const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
+  MaxCost.CompressibleWeight = getCompressibleWeight(VirtReg, MRI, RTPF);
 
   EvictionCost Cost;
   for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
@@ -311,7 +316,7 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       // Update eviction cost.
       Cost.BrokenHints += BreaksHint;
       Cost.MaxWeight = std::max(Cost.MaxWeight, Intf->weight());
-      Cost.CompressibleWeight = getCompressibleWeight(*Intf, MRI, VRM);
+      Cost.CompressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
       // Abort if this would be too expensive.
       if (!(Cost < MaxCost))
         return false;

@@ -924,7 +924,7 @@ void CompressInstEmitter::emitIsPotentiallyCompressible(raw_ostream &o) {
   FuncH.indent(27) << "const " << TargetName << "Subtarget *Subtarget,\n";
   FuncH.indent(27) << "const MCRegisterInfo &MRI,\n";
   FuncH.indent(27) << "const MCSubtargetInfo &STI,\n";
-  FuncH.indent(27) << "const VirtRegMap &VRM) {\n";
+  FuncH.indent(27) << "const RegToPhysFunction &RTPF) {\n";
 
   if (CompressPatterns.empty()) {
     o << FuncH.str();
@@ -933,31 +933,31 @@ void CompressInstEmitter::emitIsPotentiallyCompressible(raw_ostream &o) {
     return;
   }
 
-  FuncH.indent(2) << "const auto& operandInSameRegisterOrUnassigned = [&VRM, &MI](const MachineOperand& First, const MachineOperand& Second) {\n";
+  FuncH.indent(2) << "const auto& operandInSameRegisterOrUnassigned = [&RTPF, &MI](const MachineOperand& First, const MachineOperand& Second) {\n";
   // TODO: How to handle immediate operands?
   FuncH.indent(2) << "  if (!First.isReg() || !Second.isReg())\n";
   FuncH.indent(2) << "    return false;\n";
   FuncH.indent(2) << "  // If one is not set, we consider it fulfilled\n";
-  FuncH.indent(2) << "  if ((First.getReg().isVirtual() && !VRM.hasPhys(First.getReg()))\n";
-  FuncH.indent(2) << "      || (Second.getReg().isVirtual() && !VRM.hasPhys(Second.getReg()))) {\n";
+  FuncH.indent(2) << "  if ((First.getReg().isVirtual() && !RTPF.hasPhys(First.getReg()))\n";
+  FuncH.indent(2) << "      || (Second.getReg().isVirtual() && !RTPF.hasPhys(Second.getReg()))) {\n";
   FuncH.indent(2) << "    return true;\n";
   FuncH.indent(2) << "  }\n";
   FuncH.indent(2) << "MCRegister FirstReg = First.getReg().isVirtual() ? "
-                     "VRM.getPhys(First.getReg()) : First.getReg().asMCReg();\n";
+                     "RTPF.getPhys(First.getReg()) : First.getReg().asMCReg();\n";
   FuncH.indent(2) << "MCRegister SecondReg = Second.getReg().isVirtual() ? "
-                     "VRM.getPhys(Second.getReg()) : Second.getReg().asMCReg();\n";
+                     "RTPF.getPhys(Second.getReg()) : Second.getReg().asMCReg();\n";
   FuncH.indent(2) << "return FirstReg == SecondReg;\n";
   FuncH.indent(2) << "};\n";
 
-  FuncH.indent(2) << "const auto& operandInRegClassOrUnassigned = [&VRM, &MRI](const MCRegisterClass & RegisterClass, const MachineOperand& Operand) {\n";
+  FuncH.indent(2) << "const auto& operandInRegClassOrUnassigned = [&RTPF, &MRI](const MCRegisterClass & RegisterClass, const MachineOperand& Operand) {\n";
   FuncH.indent(2) << "  if (!Operand.isReg())\n";
   FuncH.indent(2) << "    return false;\n";
   FuncH.indent(2) << "  // consider unassigned as fulfilled\n";
-  FuncH.indent(2) << "  if (Operand.getReg().isVirtual() && !VRM.hasPhys(Operand.getReg())) {\n";
+  FuncH.indent(2) << "  if (Operand.getReg().isVirtual() && !RTPF.hasPhys(Operand.getReg())) {\n";
   FuncH.indent(2) << "    return true;\n";
   FuncH.indent(2) << "  }\n";
   FuncH.indent(2) << "MCRegister Reg = Operand.getReg().isVirtual() ? "
-                     "VRM.getPhys(Operand.getReg()) : Operand.getReg().asMCReg();\n";
+                     "RTPF.getPhys(Operand.getReg()) : Operand.getReg().asMCReg();\n";
   FuncH.indent(2) << "  return RegisterClass.contains(Reg);\n";
   FuncH.indent(2) << "};\n";
 
