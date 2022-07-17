@@ -110,7 +110,7 @@ public:
     return Opc <= TargetOpcode::GENERIC_OP_END;
   }
 
-  virtual bool isPotentiallyCompressible(const MachineInstr &MI, const VirtRegMap &VRM) const {
+  virtual bool isPotentiallyCompressible(const MachineInstr &MI, const RegToPhysFunction &RTPF) const {
     return false;
   }
 

@@ -206,6 +206,33 @@ class TargetInstrInfo;
     return OS;
   }
 
+  class RegToPhysFunction {
+  private:
+    VirtRegMap *RegisterMap;
+    Register MyVirtual;
+    MCRegister MyPhys;
+  public:
+    RegToPhysFunction(VirtRegMap *RegisterMap, Register MyVirtual,
+                      MCRegister MyPhys)
+        : RegisterMap(RegisterMap), MyVirtual(MyVirtual), MyPhys(MyPhys) {}
+
+    /// returns true if the specified virtual register is
+    /// mapped to a physical register
+    bool hasPhys(Register virtReg) const {
+      return RegisterMap->hasPhys(virtReg) || virtReg == MyVirtual;
+    }
+
+    /// returns the physical register mapped to the specified
+    /// virtual register
+    MCRegister getPhys(Register virtReg) const {
+      if (virtReg == MyVirtual) {
+        return MyPhys;
+      }
+      return RegisterMap->getPhys(virtReg);
+    }
+  };
+
+
 } // end llvm namespace
 
 #endif // LLVM_CODEGEN_VIRTREGMAP_H

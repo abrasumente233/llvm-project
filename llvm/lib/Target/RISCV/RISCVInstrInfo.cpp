@@ -58,14 +58,14 @@ RISCVInstrInfo::RISCVInstrInfo(RISCVSubtarget &STI)
     : RISCVGenInstrInfo(RISCV::ADJCALLSTACKDOWN, RISCV::ADJCALLSTACKUP),
       STI(STI) {}
 
-bool RISCVInstrInfo::isPotentiallyCompressible(const MachineInstr &MI, const VirtRegMap &VRM) const {
+bool RISCVInstrInfo::isPotentiallyCompressible(const MachineInstr &MI, const RegToPhysFunction &RTPF) const {
   const auto MF = MI.getMF();
   const auto &TM = static_cast<const RISCVTargetMachine &>(MF->getTarget());
   const MCRegisterInfo &MRI = *TM.getMCRegisterInfo();
   const MCSubtargetInfo &STI = *TM.getMCSubtargetInfo();
   const RISCVSubtarget &ST = MF->getSubtarget<RISCVSubtarget>();
 
-  return isPotentiallyCompressibleInst(MI, &ST, MRI, STI, VRM);
+  return isPotentiallyCompressibleInst(MI, &ST, MRI, STI, RTPF);
 }
 
 MCInst RISCVInstrInfo::getNop() const {
