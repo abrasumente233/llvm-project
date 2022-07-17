@@ -16,6 +16,7 @@
 #include "llvm/CodeGen/LiveRegMatrix.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/RegisterClassInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
@@ -173,6 +174,63 @@ bool DefaultEvictionAdvisor::canEvictHintInterference(
                                          FixedRegisters);
 }
 
+float getCompressibleWeight(const LiveInterval &VirtReg,
+                            const MachineRegisterInfo *MRI,
+                            const VirtRegMap *VRM) {
+  int Weight = 0;
+  for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
+    const auto &TII = MI.getMF()->getSubtarget().getInstrInfo();
+    bool Compressible = TII->isPotentiallyCompressible(MI, *VRM);
+    if (Compressible) {
+      Weight += 1;
+    } else {
+      // FIXME: Remove!
+      //      LLVM_DEBUG(dbgs() << "MI " << MI << " not compressible ");
+      //      unsigned count = 0;
+      //      for (const auto &item : MI.operands()) {
+      //        count += 1;
+      //      }
+      //      for (unsigned i = 0; i < count; i++) {
+      //        if (!MI.getOperand(i).isReg()) {
+      //          continue;
+      //        }
+      //        const auto reg = MI.getOperand(i).getReg();
+      //        if (reg.isPhysical()) {
+      //          LLVM_DEBUG(dbgs() << i << ": " << reg);
+      //        } else {
+      //          LLVM_DEBUG(dbgs() << i << ": " << VRM->getPhys(reg));
+      //        }
+      //      }
+      //      LLVM_DEBUG(dbgs() << "\n");
+      //       if (!STI.getFeatureBits()[RISCV::FeatureStdExtC]) {
+      //        std::cout << "No c flag set" << std::endl;
+      //      }
+      //      if
+      //      (!operandInSameRegisterOrUnassigned(MI.getOperand(1),MI.getOperand(0)))
+      //      {
+      //        std::cout << "2addr 1 violated" << std::endl;
+      //      }
+      //      if
+      //      (!operandInSameRegisterOrUnassigned(MI.getOperand(2),MI.getOperand(0)))
+      //      {
+      //        std::cout << "2addr 2 violated" << std::endl;
+      //      }
+      //      if
+      //      (!operandInRegClassOrUnassigned(MRI.getRegClass(RISCV::GPRNoX0RegClassID),MI.getOperand(1)))
+      //      {
+      //        std::cout << "Op 1 violated" << std::endl;
+      //      }
+      //      if
+      //      (!operandInRegClassOrUnassigned(MRI.getRegClass(RISCV::GPRNoX0RegClassID),MI.getOperand(2)))
+      //      {
+      //        std::cout << "Op 1 violated" << std::endl;
+      //      }
+    }
+  }
+
+  return Weight;
+}
+
 /// canEvictInterferenceBasedOnCost - Return true if all interferences between
 /// VirtReg and PhysReg can be evicted.
 ///
@@ -199,6 +257,8 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
   // This works out so a register without a cascade number is allowed to evict
   // anything, and it can be evicted by anything.
   unsigned Cascade = RA.getExtraInfo().getCascadeOrCurrentNext(VirtReg.reg());
+
+  MaxCost.CompressibleWeight = getCompressibleWeight(VirtReg, MRI, VRM);
 
   EvictionCost Cost;
   for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
@@ -251,6 +311,7 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       // Update eviction cost.
       Cost.BrokenHints += BreaksHint;
       Cost.MaxWeight = std::max(Cost.MaxWeight, Intf->weight());
+      Cost.CompressibleWeight = getCompressibleWeight(*Intf, MRI, VRM);
       // Abort if this would be too expensive.
       if (!(Cost < MaxCost))
         return false;

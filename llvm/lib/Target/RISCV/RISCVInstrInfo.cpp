@@ -32,6 +32,7 @@
 using namespace llvm;
 
 #define GEN_CHECK_COMPRESS_INSTR
+#define GEN_CHECK_COMPRESSIBLE_INSTR
 #include "RISCVGenCompressInstEmitter.inc"
 
 #define GET_INSTRINFO_CTOR_DTOR
@@ -54,6 +55,16 @@ using namespace RISCV;
 RISCVInstrInfo::RISCVInstrInfo(RISCVSubtarget &STI)
     : RISCVGenInstrInfo(RISCV::ADJCALLSTACKDOWN, RISCV::ADJCALLSTACKUP),
       STI(STI) {}
+
+bool RISCVInstrInfo::isPotentiallyCompressible(const MachineInstr &MI, const VirtRegMap &VRM) const {
+  const auto MF = MI.getMF();
+  const auto &TM = static_cast<const RISCVTargetMachine &>(MF->getTarget());
+  const MCRegisterInfo &MRI = *TM.getMCRegisterInfo();
+  const MCSubtargetInfo &STI = *TM.getMCSubtargetInfo();
+  const RISCVSubtarget &ST = MF->getSubtarget<RISCVSubtarget>();
+
+  return isPotentiallyCompressibleInst(MI, &ST, MRI, STI, VRM);
+}
 
 MCInst RISCVInstrInfo::getNop() const {
   if (STI.getFeatureBits()[RISCV::FeatureStdExtC])

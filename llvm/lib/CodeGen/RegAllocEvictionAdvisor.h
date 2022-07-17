@@ -17,6 +17,8 @@
 #include "llvm/Config/llvm-config.h"
 #include "llvm/MC/MCRegister.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/Debug.h"
+#include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 class AllocationOrder;
@@ -78,6 +80,7 @@ enum LiveRangeStage {
 struct EvictionCost {
   unsigned BrokenHints = 0; ///< Total number of broken hints.
   float MaxWeight = 0;      ///< Maximum spill weight evicted.
+  float CompressibleWeight = 0;
 
   EvictionCost() = default;
 
@@ -88,8 +91,18 @@ struct EvictionCost {
   void setBrokenHints(unsigned NHints) { BrokenHints = NHints; }
 
   bool operator<(const EvictionCost &O) const {
-    return std::tie(BrokenHints, MaxWeight) <
-           std::tie(O.BrokenHints, O.MaxWeight);
+    bool smaller =
+        std::tie(BrokenHints, MaxWeight) < std::tie(O.BrokenHints, O.MaxWeight);
+    if (smaller) {
+      return smaller;
+    }
+    DEBUG_WITH_TYPE("regallocevictad", dbgs()
+                                           << "********** TIED **********\n"
+                                           << "  " << CompressibleWeight
+                                           << " vs " << O.CompressibleWeight);
+
+    // The compression weight is a bonus
+    return CompressibleWeight < O.CompressibleWeight;
   }
 };
 

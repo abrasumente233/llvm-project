@@ -130,6 +130,7 @@ class CompressInstEmitter {
                             IndexedMap<OpData> &OperandMap, bool IsSourceInst);
   void evaluateCompressPat(Record *Compress);
   void emitCompressInstEmitter(raw_ostream &o, EmitterType EType);
+  void emitIsPotentiallyCompressible(raw_ostream &o);
   bool validateTypes(Record *SubType, Record *Type, bool IsSourceInst);
   bool validateRegister(Record *Reg, Record *RegClass);
   void createDagOperandMapping(Record *Rec, StringMap<unsigned> &SourceOperands,
@@ -888,6 +889,246 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     o << "\n#endif //GEN_CHECK_COMPRESS_INSTR\n\n";
 }
 
+void CompressInstEmitter::emitIsPotentiallyCompressible(raw_ostream &o) {
+  Record *AsmWriter = Target.getAsmWriter();
+  if (!AsmWriter->getValueAsInt("PassSubtarget"))
+    PrintFatalError(AsmWriter->getLoc(),
+                    "'PassSubtarget' is false. SubTargetInfo object is needed "
+                    "for target features.\n");
+
+  StringRef TargetName = Target.getName();
+
+  // Sort entries in CompressPatterns to handle instructions that can have more
+  // than one candidate for compression\uncompression, e.g ADD can be
+  // transformed to a C_ADD or a C_MV. When emitting 'uncompress()' function the
+  // source and destination are flipped and the sort key needs to change
+  // accordingly.
+  llvm::stable_sort(CompressPatterns, [](const CompressPat &LHS,
+                                              const CompressPat &RHS) {
+      return (LHS.Source.TheDef->getName() < RHS.Source.TheDef->getName());
+  });
+
+  // A list of ImmLeaf Predicates for all operands in use, and the reverse map.
+  std::vector<const Record *> ImmLeafPredicates;
+  DenseMap<const Record *, unsigned> ImmLeafPredicateMap;
+
+  std::string F;
+  std::string FH;
+  raw_string_ostream Func(F);
+  raw_string_ostream FuncH(FH);
+
+  o << "\n#ifdef GEN_CHECK_COMPRESSIBLE_INSTR\n"
+    << "#undef GEN_CHECK_COMPRESSIBLE_INSTR\n\n";
+
+  FuncH << "static bool isPotentiallyCompressibleInst(const MachineInstr &MI,\n";
+  FuncH.indent(27) << "const " << TargetName << "Subtarget *Subtarget,\n";
+  FuncH.indent(27) << "const MCRegisterInfo &MRI,\n";
+  FuncH.indent(27) << "const MCSubtargetInfo &STI,\n";
+  FuncH.indent(27) << "const VirtRegMap &VRM) {\n";
+
+  if (CompressPatterns.empty()) {
+    o << FuncH.str();
+    o.indent(2) << "return false;\n}\n";
+    o << "\n#endif //GEN_CHECK_COMPRESSIBLE_INSTR\n\n";
+    return;
+  }
+
+  FuncH.indent(2) << "const auto& operandInSameRegisterOrUnassigned = [&VRM, &MI](const MachineOperand& First, const MachineOperand& Second) {\n";
+  // TODO: How to handle immediate operands?
+  FuncH.indent(2) << "  if (!First.isReg() || !Second.isReg())\n";
+  FuncH.indent(2) << "    return false;\n";
+  FuncH.indent(2) << "  // If one is not set, we consider it fulfilled\n";
+  FuncH.indent(2) << "  if ((First.getReg().isVirtual() && !VRM.hasPhys(First.getReg()))\n";
+  FuncH.indent(2) << "      || (Second.getReg().isVirtual() && !VRM.hasPhys(Second.getReg()))) {\n";
+  FuncH.indent(2) << "    return true;\n";
+  FuncH.indent(2) << "  }\n";
+  FuncH.indent(2) << "MCRegister FirstReg = First.getReg().isVirtual() ? "
+                     "VRM.getPhys(First.getReg()) : First.getReg().asMCReg();\n";
+  FuncH.indent(2) << "MCRegister SecondReg = Second.getReg().isVirtual() ? "
+                     "VRM.getPhys(Second.getReg()) : Second.getReg().asMCReg();\n";
+  FuncH.indent(2) << "return FirstReg == SecondReg;\n";
+  FuncH.indent(2) << "};\n";
+
+  FuncH.indent(2) << "const auto& operandInRegClassOrUnassigned = [&VRM, &MRI](const MCRegisterClass & RegisterClass, const MachineOperand& Operand) {\n";
+  FuncH.indent(2) << "  if (!Operand.isReg())\n";
+  FuncH.indent(2) << "    return false;\n";
+  FuncH.indent(2) << "  // consider unassigned as fulfilled\n";
+  FuncH.indent(2) << "  if (Operand.getReg().isVirtual() && !VRM.hasPhys(Operand.getReg())) {\n";
+  FuncH.indent(2) << "    return true;\n";
+  FuncH.indent(2) << "  }\n";
+  FuncH.indent(2) << "MCRegister Reg = Operand.getReg().isVirtual() ? "
+                     "VRM.getPhys(Operand.getReg()) : Operand.getReg().asMCReg();\n";
+  FuncH.indent(2) << "  return RegisterClass.contains(Reg);\n";
+  FuncH.indent(2) << "};\n";
+
+  std::string CaseString;
+  raw_string_ostream CaseStream(CaseString);
+  StringRef PrevOp;
+  StringRef CurOp;
+  CaseStream << "  switch (MI.getOpcode()) {\n";
+  CaseStream << "    default: return false;\n";
+
+  for (auto &CompressPat : CompressPatterns) {
+    std::string CondString;
+    std::string CodeString;
+    raw_string_ostream CondStream(CondString);
+    raw_string_ostream CodeStream(CodeString);
+    CodeGenInstruction &Source = CompressPat.Source;
+    CodeGenInstruction &Dest = CompressPat.Dest;
+    IndexedMap<OpData> SourceOperandMap = CompressPat.SourceOperandMap;
+    IndexedMap<OpData> &DestOperandMap = CompressPat.DestOperandMap;
+
+    CurOp = Source.TheDef->getName();
+    // Check current and previous opcode to decide to continue or end a case.
+    if (CurOp != PrevOp) {
+      if (!PrevOp.empty())
+        CaseStream.indent(6) << "break;\n    } // case " + PrevOp + "\n";
+      CaseStream.indent(4) << "case " + TargetName + "::" + CurOp + ": {\n";
+    }
+
+    std::set<std::pair<bool, StringRef>> FeaturesSet;
+    std::set<std::set<std::pair<bool, StringRef>>> AnyOfFeatureSets;
+    // Add CompressPat required features.
+    getReqFeatures(FeaturesSet, AnyOfFeatureSets, CompressPat.PatReqFeatures);
+
+    // Add Dest instruction required features.
+    std::vector<Record *> ReqFeatures;
+    std::vector<Record *> RF = Dest.TheDef->getValueAsListOfDefs("Predicates");
+    copy_if(RF, std::back_inserter(ReqFeatures), [](Record *R) {
+      return R->getValueAsBit("AssemblerMatcherPredicate");
+    });
+    getReqFeatures(FeaturesSet, AnyOfFeatureSets, ReqFeatures);
+
+    // Emit checks for all required features.
+    for (auto &Op : FeaturesSet) {
+      StringRef Not = Op.first ? "!" : "";
+      CondStream.indent(6) << Not << "STI.getFeatureBits()[" << TargetName
+                           << "::" << Op.second << "]"
+                           << " &&\n";
+    }
+
+    // Emit checks for all required feature groups.
+    for (auto &Set : AnyOfFeatureSets) {
+      CondStream.indent(6) << "(";
+      for (auto &Op : Set) {
+        bool IsLast = &Op == &*Set.rbegin();
+        StringRef Not = Op.first ? "!" : "";
+        CondStream << Not << "STI.getFeatureBits()[" << TargetName
+                   << "::" << Op.second << "]";
+        if (!IsLast)
+          CondStream << " || ";
+      }
+      CondStream << ") &&\n";
+    }
+
+    // Start Source Inst operands validation.
+    unsigned OpNo = 0;
+    for (OpNo = 0; OpNo < Source.Operands.size(); ++OpNo) {
+      if (SourceOperandMap[OpNo].TiedOpIdx != -1) {
+        if (Source.Operands[OpNo].Rec->isSubClassOf("RegisterClass"))
+          CondStream.indent(6)
+              << "(operandInSameRegisterOrUnassigned("
+              << "MI.getOperand(" << OpNo << "),"
+              << "MI.getOperand(" << SourceOperandMap[OpNo].TiedOpIdx
+              << "))) &&\n";
+        else
+          PrintFatalError("Unexpected tied operand types!\n");
+      }
+      // Check for fixed immediates\registers in the source instruction.
+      switch (SourceOperandMap[OpNo].Kind) {
+      case OpData::Operand:
+        // We don't need to do anything for source instruction operand checks.
+        break;
+      case OpData::Imm:
+        CondStream.indent(6)
+            << "(MI.getOperand(" << OpNo << ").isImm()) &&\n"
+            << "      (MI.getOperand(" << OpNo
+            << ").getImm() == " << SourceOperandMap[OpNo].Data.Imm << ") &&\n";
+        break;
+      case OpData::Reg: {
+        Record *Reg = SourceOperandMap[OpNo].Data.Reg;
+        CondStream.indent(6)
+            << "(MI.getOperand(" << OpNo << ").getReg() == " << TargetName
+            << "::" << Reg->getName() << ") &&\n";
+        break;
+      }
+      }
+    }
+    CodeStream.indent(6) << "// " << Dest.AsmString << "\n";
+    OpNo = 0;
+    for (const auto &DestOperand : Dest.Operands) {
+      CodeStream.indent(6) << "// Operand: " << DestOperand.Name << "\n";
+      switch (DestOperandMap[OpNo].Kind) {
+      case OpData::Operand: {
+        unsigned OpIdx = DestOperandMap[OpNo].Data.Operand;
+        // Check that the operand in the Source instruction fits
+        // the type for the Dest instruction.
+        if (DestOperand.Rec->isSubClassOf("RegisterClass")) {
+          // This is a register operand. Check the register class.
+          // Don't check register class if this is a tied operand, it was done
+          // for the operand its tied to.
+          if (DestOperand.getTiedRegister() == -1)
+            CondStream.indent(6) << "(operandInRegClassOrUnassigned("
+                                 << "MRI.getRegClass(" << TargetName
+                                 << "::" << DestOperand.Rec->getName()
+                                 << "RegClassID),"
+                                 << "MI.getOperand(" << OpIdx << "))) &&\n";
+        } else {
+          // Handling immediate operands.
+          unsigned Entry = getPredicates(ImmLeafPredicateMap, ImmLeafPredicates,
+                                         DestOperand.Rec, "ImmediateCode");
+          CondStream.indent(6) << "MI.getOperand(" << OpIdx << ").isImm() &&\n";
+          CondStream.indent(6) << TargetName << "ValidateMachineOperandPotCompress("
+                               << "MI.getOperand(" << OpIdx << "), Subtarget, "
+                               << Entry << ") &&\n";
+        }
+        break;
+      }
+      case OpData::Imm: {
+        unsigned Entry = getPredicates(ImmLeafPredicateMap, ImmLeafPredicates,
+                                       DestOperand.Rec, "ImmediateCode");
+        CondStream.indent(6)
+            << TargetName << "ValidateMachineOperandPotCompress(MachineOperand::CreateImm("
+            << DestOperandMap[OpNo].Data.Imm << "), SubTarget, " << Entry
+            << ") &&\n";
+      } break;
+      case OpData::Reg: {
+      } break;
+      }
+      ++OpNo;
+    }
+    mergeCondAndCode(CaseStream, CondStream.str(), CodeStream.str());
+    PrevOp = CurOp;
+  }
+  Func << CaseStream.str() << "\n";
+  // Close brace for the last case.
+  Func.indent(4) << "} // case " << CurOp << "\n";
+  Func.indent(2) << "} // switch\n";
+  Func.indent(2) << "return false;\n}\n";
+
+  if (!ImmLeafPredicates.empty()) {
+    o << "static bool " << TargetName
+      << "ValidateMachineOperandPotCompress(const MachineOperand &MO,\n"
+      << "                  const " << TargetName << "Subtarget *Subtarget,\n"
+      << "                  unsigned PredicateIndex) {\n"
+      << "  int64_t Imm = MO.getImm();\n"
+      << "  switch (PredicateIndex) {\n"
+      << "  default:\n"
+      << "    llvm_unreachable(\"Unknown ImmLeaf Predicate kind\");\n"
+      << "    break;\n";
+
+    printPredicates(ImmLeafPredicates, "ImmediateCode", o);
+
+    o << "  }\n"
+      << "}\n\n";
+  }
+
+  o << FuncH.str();
+  o << Func.str();
+
+  o << "\n#endif //GEN_CHECK_COMPRESSIBLE_INSTR\n\n";
+}
+
 void CompressInstEmitter::run(raw_ostream &o) {
   std::vector<Record *> Insts = Records.getAllDerivedDefinitions("CompressPat");
 
@@ -903,6 +1144,8 @@ void CompressInstEmitter::run(raw_ostream &o) {
   emitCompressInstEmitter(o, EmitterType::Uncompress);
   // Generate isCompressibleInst() function.
   emitCompressInstEmitter(o, EmitterType::CheckCompress);
+
+  emitIsPotentiallyCompressible(o);
 }
 
 namespace llvm {
