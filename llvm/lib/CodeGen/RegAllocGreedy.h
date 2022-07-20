@@ -341,6 +341,8 @@ private:
                                   SmallLISet &RecoloringCandidates,
                                   const SmallVirtRegSet &FixedRegisters);
 
+  unsigned getTwoAddrBenefit(const LiveInterval &, MCRegister);
+
   MCRegister tryAssign(const LiveInterval &, AllocationOrder &,
                        SmallVectorImpl<Register> &, const SmallVirtRegSet &);
   MCRegister tryEvict(const LiveInterval &, AllocationOrder &,

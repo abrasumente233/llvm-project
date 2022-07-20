@@ -390,19 +390,128 @@ const LiveInterval *RAGreedy::dequeue(PQueue &CurQueue) {
 //                            Direct Assignment
 //===----------------------------------------------------------------------===//
 
+unsigned RAGreedy::getTwoAddrBenefit(const LiveInterval &VirtReg,
+                                  MCRegister PhysReg) {
+  const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
+
+  LLVM_DEBUG(dbgs() << " Looking for benefits for " << VirtReg << "\n");
+
+  unsigned Benefit = 0;
+
+  for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
+    if (MI.getNumOperands() < 2) {
+      continue;
+    }
+    if (!MI.getOperand(0).isReg()) {
+      continue;
+    }
+
+    auto BaseOperandReg = MI.getOperand(0).getReg();
+    MCRegister BaseOperandMCReg;
+    if (BaseOperandReg.isPhysical()) {
+      BaseOperandMCReg = BaseOperandReg.asMCReg();
+    } else if (BaseOperandReg.isVirtual() && RTPF.hasPhys(BaseOperandReg)) {
+      BaseOperandMCReg = RTPF.getPhys(BaseOperandReg);
+    } else {
+      continue;
+    }
+
+    for (unsigned Index = 1; Index < MI.getNumOperands(); Index++) {
+      if (!MI.getOperand(Index).isReg()) {
+        continue;
+      }
+      auto OperandReg = MI.getOperand(Index).getReg();
+      MCRegister OperandMCReg;
+      if (OperandReg.isPhysical()) {
+        OperandMCReg = OperandReg.asMCReg();
+      } else if (OperandReg.isVirtual() && RTPF.hasPhys(OperandReg)) {
+        OperandMCReg = RTPF.getPhys(OperandReg);
+      } else {
+        continue;
+      }
+
+      if (OperandMCReg == BaseOperandMCReg) {
+        Benefit++;
+        LLVM_DEBUG(dbgs() << "  U " << MI);
+      } else {
+        LLVM_DEBUG(dbgs() << "  xU " << TRI->getRegAsmName(OperandMCReg)
+                          << " vs " << TRI->getRegAsmName(BaseOperandMCReg)
+                          << " " << MI);
+      }
+    }
+  }
+  for (const auto &MI : MRI->def_instructions(VirtReg.reg())) {
+    if (MI.getNumOperands() < 2) {
+      continue;
+    }
+    if (!MI.getOperand(0).isReg()) {
+      continue;
+    }
+
+    auto BaseOperandReg = MI.getOperand(0).getReg();
+    MCRegister BaseOperandMCReg;
+    if (BaseOperandReg.isPhysical()) {
+      BaseOperandMCReg = BaseOperandReg.asMCReg();
+    } else if (BaseOperandReg.isVirtual() && RTPF.hasPhys(BaseOperandReg)) {
+      BaseOperandMCReg = RTPF.getPhys(BaseOperandReg);
+    } else {
+      continue;
+    }
+
+    for (unsigned Index = 1; Index < MI.getNumOperands(); Index++) {
+      if (!MI.getOperand(Index).isReg()) {
+        continue;
+      }
+      auto OperandReg = MI.getOperand(Index).getReg();
+      MCRegister OperandMCReg;
+      if (OperandReg.isPhysical()) {
+        OperandMCReg = OperandReg.asMCReg();
+      } else if (OperandReg.isVirtual() && RTPF.hasPhys(OperandReg)) {
+        OperandMCReg = RTPF.getPhys(OperandReg);
+      } else {
+        continue;
+      }
+
+      if (OperandMCReg == BaseOperandMCReg) {
+        Benefit++;
+        LLVM_DEBUG(dbgs() << "  D " << MI);
+      } else {
+        LLVM_DEBUG(dbgs() << "  xD " << TRI->getRegAsmName(OperandMCReg)
+                          << " vs " << TRI->getRegAsmName(BaseOperandMCReg)
+                          << " " << MI);
+      }
+    }
+  }
+
+  return Benefit;
+}
+
 /// tryAssign - Try to assign VirtReg to an available register.
 MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
                                AllocationOrder &Order,
                                SmallVectorImpl<Register> &NewVRegs,
                                const SmallVirtRegSet &FixedRegisters) {
   MCRegister PhysReg;
-  for (auto I = Order.begin(), E = Order.end(); I != E && !PhysReg; ++I) {
+  unsigned TwoAddrBenefit = 0;
+  for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
     assert(*I);
     if (!Matrix->checkInterference(VirtReg, *I)) {
       if (I.isHint())
         return *I;
-      else
+
+      unsigned RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
+      LLVM_DEBUG(dbgs() << "2 Addr benefit " << RegTwoAddrBenefit << "\n");
+      if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit) {
+        if (PhysReg) {
+          LLVM_DEBUG(dbgs() << "Changed physical register assignment from "
+                            << TRI->getRegAsmName(PhysReg) << " ("
+                            << TwoAddrBenefit << ")"
+                            << " to " << TRI->getRegAsmName(*I) << " ("
+                            << RegTwoAddrBenefit << ")");
+        }
         PhysReg = *I;
+        TwoAddrBenefit = RegTwoAddrBenefit;
+      }
     }
   }
   if (!PhysReg.isValid())

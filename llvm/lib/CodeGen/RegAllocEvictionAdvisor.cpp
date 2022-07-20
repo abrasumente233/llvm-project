@@ -183,48 +183,6 @@ float getCompressibleWeight(const LiveInterval &VirtReg,
     bool Compressible = TII->isPotentiallyCompressible(MI, RTPF);
     if (Compressible) {
       Weight += 1;
-    } else {
-      // FIXME: Remove!
-      //      LLVM_DEBUG(dbgs() << "MI " << MI << " not compressible ");
-      //      unsigned count = 0;
-      //      for (const auto &item : MI.operands()) {
-      //        count += 1;
-      //      }
-      //      for (unsigned i = 0; i < count; i++) {
-      //        if (!MI.getOperand(i).isReg()) {
-      //          continue;
-      //        }
-      //        const auto reg = MI.getOperand(i).getReg();
-      //        if (reg.isPhysical()) {
-      //          LLVM_DEBUG(dbgs() << i << ": " << reg);
-      //        } else {
-      //          LLVM_DEBUG(dbgs() << i << ": " << VRM->getPhys(reg));
-      //        }
-      //      }
-      //      LLVM_DEBUG(dbgs() << "\n");
-      //       if (!STI.getFeatureBits()[RISCV::FeatureStdExtC]) {
-      //        std::cout << "No c flag set" << std::endl;
-      //      }
-      //      if
-      //      (!operandInSameRegisterOrUnassigned(MI.getOperand(1),MI.getOperand(0)))
-      //      {
-      //        std::cout << "2addr 1 violated" << std::endl;
-      //      }
-      //      if
-      //      (!operandInSameRegisterOrUnassigned(MI.getOperand(2),MI.getOperand(0)))
-      //      {
-      //        std::cout << "2addr 2 violated" << std::endl;
-      //      }
-      //      if
-      //      (!operandInRegClassOrUnassigned(MRI.getRegClass(RISCV::GPRNoX0RegClassID),MI.getOperand(1)))
-      //      {
-      //        std::cout << "Op 1 violated" << std::endl;
-      //      }
-      //      if
-      //      (!operandInRegClassOrUnassigned(MRI.getRegClass(RISCV::GPRNoX0RegClassID),MI.getOperand(2)))
-      //      {
-      //        std::cout << "Op 1 violated" << std::endl;
-      //      }
     }
   }
 
