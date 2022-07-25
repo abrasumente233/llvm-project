@@ -399,87 +399,13 @@ unsigned RAGreedy::getTwoAddrBenefit(const LiveInterval &VirtReg,
   unsigned Benefit = 0;
 
   for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
-    if (MI.getNumOperands() < 2) {
-      continue;
-    }
-    if (!MI.getOperand(0).isReg()) {
-      continue;
-    }
-
-    auto BaseOperandReg = MI.getOperand(0).getReg();
-    MCRegister BaseOperandMCReg;
-    if (BaseOperandReg.isPhysical()) {
-      BaseOperandMCReg = BaseOperandReg.asMCReg();
-    } else if (BaseOperandReg.isVirtual() && RTPF.hasPhys(BaseOperandReg)) {
-      BaseOperandMCReg = RTPF.getPhys(BaseOperandReg);
-    } else {
-      continue;
-    }
-
-    for (unsigned Index = 1; Index < MI.getNumOperands(); Index++) {
-      if (!MI.getOperand(Index).isReg()) {
-        continue;
-      }
-      auto OperandReg = MI.getOperand(Index).getReg();
-      MCRegister OperandMCReg;
-      if (OperandReg.isPhysical()) {
-        OperandMCReg = OperandReg.asMCReg();
-      } else if (OperandReg.isVirtual() && RTPF.hasPhys(OperandReg)) {
-        OperandMCReg = RTPF.getPhys(OperandReg);
-      } else {
-        continue;
-      }
-
-      if (OperandMCReg == BaseOperandMCReg) {
-        Benefit++;
-        LLVM_DEBUG(dbgs() << "  U " << MI);
-      } else {
-        LLVM_DEBUG(dbgs() << "  xU " << TRI->getRegAsmName(OperandMCReg)
-                          << " vs " << TRI->getRegAsmName(BaseOperandMCReg)
-                          << " " << MI);
-      }
+    if (TII->isPotentiallyCompressible(MI, RTPF)) {
+      Benefit++;
     }
   }
   for (const auto &MI : MRI->def_instructions(VirtReg.reg())) {
-    if (MI.getNumOperands() < 2) {
-      continue;
-    }
-    if (!MI.getOperand(0).isReg()) {
-      continue;
-    }
-
-    auto BaseOperandReg = MI.getOperand(0).getReg();
-    MCRegister BaseOperandMCReg;
-    if (BaseOperandReg.isPhysical()) {
-      BaseOperandMCReg = BaseOperandReg.asMCReg();
-    } else if (BaseOperandReg.isVirtual() && RTPF.hasPhys(BaseOperandReg)) {
-      BaseOperandMCReg = RTPF.getPhys(BaseOperandReg);
-    } else {
-      continue;
-    }
-
-    for (unsigned Index = 1; Index < MI.getNumOperands(); Index++) {
-      if (!MI.getOperand(Index).isReg()) {
-        continue;
-      }
-      auto OperandReg = MI.getOperand(Index).getReg();
-      MCRegister OperandMCReg;
-      if (OperandReg.isPhysical()) {
-        OperandMCReg = OperandReg.asMCReg();
-      } else if (OperandReg.isVirtual() && RTPF.hasPhys(OperandReg)) {
-        OperandMCReg = RTPF.getPhys(OperandReg);
-      } else {
-        continue;
-      }
-
-      if (OperandMCReg == BaseOperandMCReg) {
-        Benefit++;
-        LLVM_DEBUG(dbgs() << "  D " << MI);
-      } else {
-        LLVM_DEBUG(dbgs() << "  xD " << TRI->getRegAsmName(OperandMCReg)
-                          << " vs " << TRI->getRegAsmName(BaseOperandMCReg)
-                          << " " << MI);
-      }
+    if (TII->isPotentiallyCompressible(MI, RTPF)) {
+      Benefit++;
     }
   }
 
