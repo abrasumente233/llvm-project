@@ -176,7 +176,7 @@ bool DefaultEvictionAdvisor::canEvictHintInterference(
 
 float getCompressibleWeight(const LiveInterval &VirtReg,
                             const MachineRegisterInfo *MRI,
-                            const RegToPhysFunction& RTPF) {
+                            const RegToPhysFunction &RTPF) {
   int Weight = 0;
   for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
     const auto &TII = MI.getMF()->getSubtarget().getInstrInfo();
@@ -205,6 +205,9 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
   if (Matrix->checkInterference(VirtReg, PhysReg) > LiveRegMatrix::IK_VirtReg)
     return false;
 
+  // How much the compressible weight should modify the normal weight.
+  // 0 completely disables weight adjustments and only uses it as a tie-breaker.
+  const float CompressibleInfluence = 0.6;
   bool IsLocal = VirtReg.empty() || LIS->intervalIsInOneMBB(VirtReg);
 
   // Find VirtReg's cascade number. This will be unassigned if VirtReg was never
@@ -218,10 +221,14 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
 
   // We need to check how well our input would fulfill everything
   // *if we assigned it*
-  auto CurrentReg = VirtReg.reg();
   assert(VirtReg.reg().isVirtual() && "Reg was not virtual");
   const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
+
   MaxCost.CompressibleWeight = getCompressibleWeight(VirtReg, MRI, RTPF);
+  // We need to adjust the weight of our input too to ensure a fair comparison
+  MaxCost.MaxWeight =
+      MaxCost.MaxWeight * (1 - CompressibleInfluence) +
+      CompressibleInfluence * getCompressibleWeight(VirtReg, MRI, RTPF);
 
   EvictionCost Cost;
   for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
@@ -246,8 +253,8 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       if (RA.getExtraInfo().getStage(*Intf) == RS_Done)
         return false;
       // Once a live range becomes small enough, it is urgent that we find a
-      // register for it. This is indicated by an infinite spill weight. These
-      // urgent live ranges get to evict almost anything.
+      // register for it. This is indicated by an infinite spill OtherWeight.
+      // These urgent live ranges get to evict almost anything.
       //
       // Also allow urgent evictions of unspillable ranges from a strictly
       // larger allocation order.
@@ -273,7 +280,10 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       bool BreaksHint = VRM->hasPreferredPhys(Intf->reg());
       // Update eviction cost.
       Cost.BrokenHints += BreaksHint;
-      Cost.MaxWeight = std::max(Cost.MaxWeight, Intf->weight());
+      float OtherWeight =
+          Intf->weight() * (1 - CompressibleInfluence) +
+          CompressibleInfluence * getCompressibleWeight(*Intf, MRI, RTPF);
+      Cost.MaxWeight = std::max(Cost.MaxWeight, OtherWeight);
       Cost.CompressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
       // Abort if this would be too expensive.
       if (!(Cost < MaxCost))
