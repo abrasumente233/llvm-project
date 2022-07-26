@@ -1,5 +1,7 @@
 # The LLVM Compiler Infrastructure
 
+`cmake -DLLVM_USE_LINKER=mold -DLLVM_ENABLE_PROJECTS='clang;llvm' -DCMAKE_BUILD_TYPE=Debug -G "Ninja" -DLLVM_OPTIMIZED_TABLEGEN=true -DLLVM_CCACHE_BUILD=ON -DLLVM_USE_SPLIT_DWARF=On -DLLVM_LINK_LLVM_DYLIB=On ../llvm`
+
 This directory and its sub-directories contain the source code for LLVM,
 a toolkit for the construction of highly optimized compilers,
 optimizers, and run-time environments.
