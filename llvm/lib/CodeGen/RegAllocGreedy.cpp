@@ -417,15 +417,15 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
                                AllocationOrder &Order,
                                SmallVectorImpl<Register> &NewVRegs,
                                const SmallVirtRegSet &FixedRegisters) {
+  MCRegister HintedReg;
+  bool FoundHinted = false;
   MCRegister PhysReg;
-  unsigned TwoAddrBenefit = 0;
+  int TwoAddrBenefit = 0;
+  int HintedTwoAddrBenefit = 0;
   for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
     assert(*I);
     if (!Matrix->checkInterference(VirtReg, *I)) {
-      if (I.isHint())
-        return *I;
-
-      unsigned RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
+      int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
       LLVM_DEBUG(dbgs() << "2 Addr benefit " << RegTwoAddrBenefit << "\n");
       if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit) {
         if (PhysReg) {
@@ -437,11 +437,25 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
         }
         PhysReg = *I;
         TwoAddrBenefit = RegTwoAddrBenefit;
+
+        if (I.isHint()) {
+          HintedReg = *I;
+          FoundHinted = true;
+          HintedTwoAddrBenefit = RegTwoAddrBenefit;
+        }
       }
     }
   }
-  if (!PhysReg.isValid())
+
+  if (FoundHinted && TwoAddrBenefit - HintedTwoAddrBenefit >= 2) {
     return PhysReg;
+  }
+  if (FoundHinted) {
+    return HintedReg;
+  }
+  if (!PhysReg.isValid()){
+    return PhysReg;
+  }
 
   // PhysReg is available, but there may be a better choice.
 
