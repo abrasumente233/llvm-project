@@ -280,11 +280,12 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       bool BreaksHint = VRM->hasPreferredPhys(Intf->reg());
       // Update eviction cost.
       Cost.BrokenHints += BreaksHint;
+      float compressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
       float OtherWeight =
           Intf->weight() * (1 - CompressibleInfluence) +
-          CompressibleInfluence * getCompressibleWeight(*Intf, MRI, RTPF);
+          CompressibleInfluence * compressibleWeight;
       Cost.MaxWeight = std::max(Cost.MaxWeight, OtherWeight);
-      Cost.CompressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
+      Cost.CompressibleWeight = compressibleWeight;
       // Abort if this would be too expensive.
       if (!(Cost < MaxCost))
         return false;
