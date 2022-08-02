@@ -931,7 +931,6 @@ void CompressInstEmitter::emitIsPotentiallyCompressible(raw_ostream &o) {
   }
 
   FuncH.indent(2) << "const auto& operandInSameRegisterOrUnassigned = [&RTPF, &MI](const MachineOperand& First, const MachineOperand& Second) {\n";
-  // TODO: How to handle immediate operands?
   FuncH.indent(2) << "  if (!First.isReg() || !Second.isReg())\n";
   FuncH.indent(2) << "    return false;\n";
   FuncH.indent(2) << "  // If one is not set, we consider it fulfilled\n";
@@ -956,6 +955,17 @@ void CompressInstEmitter::emitIsPotentiallyCompressible(raw_ostream &o) {
   FuncH.indent(2) << "MCRegister Reg = Operand.getReg().isVirtual() ? "
                      "RTPF.getPhys(Operand.getReg()) : Operand.getReg().asMCReg();\n";
   FuncH.indent(2) << "  return RegisterClass.contains(Reg);\n";
+  FuncH.indent(2) << "};\n";
+
+  FuncH.indent(2) << "const auto& operandInRegOrUnassigned = [&RTPF, &MRI](unsigned Register, const MachineOperand& Operand) {\n";
+  FuncH.indent(2) << "    if (!Operand.isReg())\n";
+  FuncH.indent(2) << "        return false;\n";
+  FuncH.indent(2) << "    // consider unassigned as fulfilled\n";
+  FuncH.indent(2) << "    if (Operand.getReg().isVirtual() && !RTPF.hasPhys(Operand.getReg())) {\n";
+  FuncH.indent(2) << "        return true;\n";
+  FuncH.indent(2) << "    }\n";
+  FuncH.indent(2) << "    MCRegister Reg = Operand.getReg().isVirtual() ? RTPF.getPhys(Operand.getReg()) : Operand.getReg().asMCReg();\n";
+  FuncH.indent(2) << "    return Reg == Register;\n";
   FuncH.indent(2) << "};\n";
 
   std::string CaseString;
@@ -1045,8 +1055,9 @@ void CompressInstEmitter::emitIsPotentiallyCompressible(raw_ostream &o) {
       case OpData::Reg: {
         Record *Reg = SourceOperandMap[OpNo].Data.Reg;
         CondStream.indent(6)
-            << "(MI.getOperand(" << OpNo << ").getReg() == " << TargetName
-            << "::" << Reg->getName() << ") &&\n";
+            << "(operandInRegOrUnassigned(" << TargetName
+            << "::" << Reg->getName() << ", MI.getOperand(" << OpNo << ")"
+            << ")) &&\n";
         break;
       }
       }
