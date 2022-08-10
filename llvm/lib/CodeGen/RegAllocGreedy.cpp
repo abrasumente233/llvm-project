@@ -447,6 +447,16 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
     }
   }
 
+  #define DEBUG_TYPE "regallochint"
+  LLVM_DEBUG(dbgs() << "Hint state " << FoundHinted << " "
+                    << HintedTwoAddrBenefit << " " << TwoAddrBenefit
+                    << " Benefit "
+                    << TwoAddrBenefit - HintedTwoAddrBenefit
+                    << " Taken: "
+                    << (TwoAddrBenefit - HintedTwoAddrBenefit >= 1  ? "yes" : "no")
+                    << "\n");
+  #define DEBUG_TYPE "regalloc"
+
   if (FoundHinted && TwoAddrBenefit - HintedTwoAddrBenefit >= 2) {
     return PhysReg;
   }
