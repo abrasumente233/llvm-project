@@ -141,6 +141,12 @@ static cl::opt<bool> GreedyReverseLocalAssignment(
              "shorter local live ranges will tend to be allocated first"),
     cl::Hidden);
 
+static cl::opt<unsigned> CompressionHintBreakingLimit(
+    "hint-breaking-limit", cl::NotHidden,
+    cl::desc("The number of compression opportunities required before the "
+             "register allocator considers breaking a register hint"),
+    cl::init(2), cl::Hidden);
+
 static RegisterRegAlloc greedyRegAlloc("greedy", "greedy register allocator",
                                        createGreedyRegisterAllocator);
 
@@ -453,11 +459,12 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
                     << " Benefit "
                     << TwoAddrBenefit - HintedTwoAddrBenefit
                     << " Taken: "
-                    << (TwoAddrBenefit - HintedTwoAddrBenefit >= 1  ? "yes" : "no")
+                    << (TwoAddrBenefit - HintedTwoAddrBenefit >= CompressionHintBreakingLimit  ?
+			"yes" : "no")
                     << "\n");
   #define DEBUG_TYPE "regalloc"
 
-  if (FoundHinted && TwoAddrBenefit - HintedTwoAddrBenefit >= 2) {
+  if (FoundHinted && TwoAddrBenefit - HintedTwoAddrBenefit >= CompressionHintBreakingLimit) {
     return PhysReg;
   }
   if (FoundHinted) {
