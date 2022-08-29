@@ -147,6 +147,12 @@ static cl::opt<unsigned> CompressionHintBreakingLimit(
              "register allocator considers breaking a register hint"),
     cl::init(2), cl::Hidden);
 
+static cl::opt<bool> ReorderRegistersInTryAssign(
+    "reorder-registers-in-assign",
+    cl::desc("Pick the register with the lowest cost instead of the first "
+             "non-interfering when assigning them."),
+    cl::init(true), cl::NotHidden);
+
 static RegisterRegAlloc greedyRegAlloc("greedy", "greedy register allocator",
                                        createGreedyRegisterAllocator);
 
@@ -428,47 +434,63 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
   MCRegister PhysReg;
   int TwoAddrBenefit = 0;
   int HintedTwoAddrBenefit = 0;
-  for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
-    assert(*I);
-    if (!Matrix->checkInterference(VirtReg, *I)) {
-      int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
-      LLVM_DEBUG(dbgs() << "2 Addr benefit " << RegTwoAddrBenefit << "\n");
-      if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit) {
-        if (PhysReg) {
-          LLVM_DEBUG(dbgs() << "Changed physical register assignment from "
-                            << TRI->getRegAsmName(PhysReg) << " ("
-                            << TwoAddrBenefit << ")"
-                            << " to " << TRI->getRegAsmName(*I) << " ("
-                            << RegTwoAddrBenefit << ")");
-        }
-        PhysReg = *I;
-        TwoAddrBenefit = RegTwoAddrBenefit;
 
-        if (I.isHint()) {
-          HintedReg = *I;
-          FoundHinted = true;
-          HintedTwoAddrBenefit = RegTwoAddrBenefit;
+  if (ReorderRegistersInTryAssign) {
+    for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
+      assert(*I);
+      if (!Matrix->checkInterference(VirtReg, *I)) {
+        int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
+        LLVM_DEBUG(dbgs() << "2 Addr benefit " << RegTwoAddrBenefit << "\n");
+        if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit) {
+          if (PhysReg) {
+            LLVM_DEBUG(dbgs() << "Changed physical register assignment from "
+                              << TRI->getRegAsmName(PhysReg) << " ("
+                              << TwoAddrBenefit << ")"
+                              << " to " << TRI->getRegAsmName(*I) << " ("
+                              << RegTwoAddrBenefit << ")");
+          }
+          PhysReg = *I;
+          TwoAddrBenefit = RegTwoAddrBenefit;
+
+          if (I.isHint()) {
+            HintedReg = *I;
+            FoundHinted = true;
+            HintedTwoAddrBenefit = RegTwoAddrBenefit;
+          }
         }
       }
     }
-  }
 
-  #define DEBUG_TYPE "regallochint"
-  LLVM_DEBUG(dbgs() << "Hint state " << FoundHinted << " "
-                    << HintedTwoAddrBenefit << " " << TwoAddrBenefit
-                    << " Benefit "
-                    << TwoAddrBenefit - HintedTwoAddrBenefit
-                    << " Taken: "
-                    << (TwoAddrBenefit - HintedTwoAddrBenefit >= CompressionHintBreakingLimit  ?
-			"yes" : "no")
-                    << "\n");
-  #define DEBUG_TYPE "regalloc"
+    #define DEBUG_TYPE "regallochint"
+    LLVM_DEBUG(dbgs() << "Hint state " << FoundHinted << " "
+                      << HintedTwoAddrBenefit << " " << TwoAddrBenefit
+                      << " Benefit " << TwoAddrBenefit - HintedTwoAddrBenefit
+                      << " Taken: "
+                      << (TwoAddrBenefit - HintedTwoAddrBenefit >=
+                          CompressionHintBreakingLimit
+                          ? "yes"
+                          : "no")
+                      << "\n");
+    #define DEBUG_TYPE "regalloc"
 
-  if (FoundHinted && TwoAddrBenefit - HintedTwoAddrBenefit >= CompressionHintBreakingLimit) {
-    return PhysReg;
-  }
-  if (FoundHinted) {
-    return HintedReg;
+    if (FoundHinted &&
+        TwoAddrBenefit - HintedTwoAddrBenefit >= CompressionHintBreakingLimit) {
+      return PhysReg;
+    }
+    if (FoundHinted) {
+      return HintedReg;
+    }
+  } else {
+    for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
+      assert(*I);
+      if (!Matrix->checkInterference(VirtReg, *I)) {
+        if (I.isHint()) {
+          return *I;
+        }
+        PhysReg = *I;
+        break;
+      }
+    }
   }
   if (!PhysReg.isValid()){
     return PhysReg;
