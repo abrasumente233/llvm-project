@@ -52,6 +52,17 @@ cl::opt<unsigned> EvictInterferenceCutoff(
              "disable, pass a very large number."),
     cl::init(10));
 
+static cl::opt<float> CompressibleInfluence(
+    "regalloc-eviction-compressible-influence", cl::Hidden,
+    cl::desc("weight = nornmal weight * (1 - ci) + compressible weight * ci"),
+    cl::init(0.6));
+
+static cl::opt<bool> CompressibleUsedAsTieBreaker(
+    "regalloc-eviction-use-compressible-as-tie-breaker", cl::Hidden,
+    cl::desc("If the weights of two live ranges are equal, the one with the"
+             " lower compressible weight wins."),
+    cl::init(true));
+
 #define DEBUG_TYPE "regalloc"
 #ifdef LLVM_HAVE_TF_AOT_REGALLOCEVICTMODEL
 #define LLVM_HAVE_TF_AOT
@@ -207,7 +218,6 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
 
   // How much the compressible weight should modify the normal weight.
   // 0 completely disables weight adjustments and only uses it as a tie-breaker.
-  const float CompressibleInfluence = 0.6;
   bool IsLocal = VirtReg.empty() || LIS->intervalIsInOneMBB(VirtReg);
 
   // Find VirtReg's cascade number. This will be unassigned if VirtReg was never
@@ -224,7 +234,9 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
   assert(VirtReg.reg().isVirtual() && "Reg was not virtual");
   const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
 
-  MaxCost.CompressibleWeight = getCompressibleWeight(VirtReg, MRI, RTPF);
+  MaxCost.CompressibleWeight = CompressibleUsedAsTieBreaker
+                                   ? getCompressibleWeight(VirtReg, MRI, RTPF)
+                                   : 0;
   // We need to adjust the weight of our input too to ensure a fair comparison
   MaxCost.MaxWeight =
       MaxCost.MaxWeight * (1 - CompressibleInfluence) +
@@ -285,7 +297,8 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
           Intf->weight() * (1 - CompressibleInfluence) +
           CompressibleInfluence * compressibleWeight;
       Cost.MaxWeight = std::max(Cost.MaxWeight, OtherWeight);
-      Cost.CompressibleWeight = compressibleWeight;
+      Cost.CompressibleWeight =
+          CompressibleUsedAsTieBreaker ? compressibleWeight : 0;
       // Abort if this would be too expensive.
       if (!(Cost < MaxCost))
         return false;
