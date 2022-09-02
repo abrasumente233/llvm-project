@@ -19,6 +19,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include <optional>
+#include <random>
 
 using namespace llvm;
 
@@ -104,6 +105,14 @@ Expected<std::unique_ptr<ToolOutputFile>> llvm::setupLLVMOptimizationRemarks(
   if (RemarksFilename.empty())
     return nullptr;
 
+  std::random_device Dev;
+  std::mt19937 Rng(Dev());
+  std::uniform_int_distribution<std::mt19937::result_type> Dist(0,2147483647);
+  unsigned long Val = Dist(Rng);
+  SmallString<0> OutputNameStr;
+  StringRef NewRemarksFilename =
+      (RemarksFilename + std::to_string(Val) + ".yaml").toStringRef(OutputNameStr);
+
   Expected<remarks::Format> Format = remarks::parseFormat(RemarksFormat);
   if (Error E = Format.takeError())
     return make_error<LLVMRemarkSetupFormatError>(std::move(E));
@@ -112,7 +121,7 @@ Expected<std::unique_ptr<ToolOutputFile>> llvm::setupLLVMOptimizationRemarks(
   auto Flags = *Format == remarks::Format::YAML ? sys::fs::OF_TextWithCRLF
                                                 : sys::fs::OF_None;
   auto RemarksFile =
-      std::make_unique<ToolOutputFile>(RemarksFilename, EC, Flags);
+      std::make_unique<ToolOutputFile>(NewRemarksFilename, EC, Flags);
   // We don't use llvm::FileError here because some diagnostics want the file
   // name separately.
   if (EC)
@@ -126,7 +135,7 @@ Expected<std::unique_ptr<ToolOutputFile>> llvm::setupLLVMOptimizationRemarks(
 
   // Create the main remark streamer.
   Context.setMainRemarkStreamer(std::make_unique<remarks::RemarkStreamer>(
-      std::move(*RemarkSerializer), RemarksFilename));
+      std::move(*RemarkSerializer), NewRemarksFilename));
 
   // Create LLVM's optimization remarks streamer.
   Context.setLLVMRemarkStreamer(
