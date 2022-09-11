@@ -50,7 +50,8 @@ static Optional<remarks::RemarkLocation>
 toRemarkLocation(const DiagnosticLocation &DL) {
   if (!DL.isValid())
     return None;
-  StringRef File = DL.getRelativePath();
+  std::string* String = new std::string(DL.getAbsolutePath());
+  StringRef File = *String;
   unsigned Line = DL.getLine();
   unsigned Col = DL.getColumn();
   return remarks::RemarkLocation{File, Line, Col};
