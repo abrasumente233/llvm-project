@@ -2682,7 +2682,7 @@ void RAGreedy::reportStats() {
         if (std::find(PunishedCSR.begin(), PunishedCSR.end(), CSR.id()) == PunishedCSR.end()) {
           PunishedCSR.push_back(CSR.id());
           Stats.Spills += 1;
-          Stats.SpillsCost += CSRCost.getFrequency();
+          Stats.SpillsCost += MBFI->getEntryFreq();
         }
       }
     }
