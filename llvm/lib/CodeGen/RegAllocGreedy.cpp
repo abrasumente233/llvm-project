@@ -434,14 +434,19 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
   MCRegister PhysReg;
   int TwoAddrBenefit = 0;
   int HintedTwoAddrBenefit = 0;
+  bool FoundNotCSRFirstUse = false;
 
   if (ReorderRegistersInTryAssign) {
     for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
       assert(*I);
       if (!Matrix->checkInterference(VirtReg, *I)) {
-        int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
+        int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I) - RegCosts[*I];
+        bool IsCSRFirstUse = EvictAdvisor->isUnusedCalleeSavedReg(*I);
+        if (FoundNotCSRFirstUse && IsCSRFirstUse) {
+          continue;
+        }
         LLVM_DEBUG(dbgs() << "2 Addr benefit " << RegTwoAddrBenefit << "\n");
-        if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit) {
+        if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit || (!FoundNotCSRFirstUse && !IsCSRFirstUse)) {
           if (PhysReg) {
             LLVM_DEBUG(dbgs() << "Changed physical register assignment from "
                               << TRI->getRegAsmName(PhysReg) << " ("
@@ -451,6 +456,7 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
           }
           PhysReg = *I;
           TwoAddrBenefit = RegTwoAddrBenefit;
+          FoundNotCSRFirstUse = !IsCSRFirstUse;
 
           if (I.isHint()) {
             HintedReg = *I;
@@ -474,11 +480,8 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
     #define DEBUG_TYPE "regalloc"
 
     if (FoundHinted &&
-        TwoAddrBenefit - HintedTwoAddrBenefit >= CompressionHintBreakingLimit) {
-      return PhysReg;
-    }
-    if (FoundHinted) {
-      return HintedReg;
+        TwoAddrBenefit - HintedTwoAddrBenefit < CompressionHintBreakingLimit) {
+        return HintedReg;
     }
   } else {
     for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
