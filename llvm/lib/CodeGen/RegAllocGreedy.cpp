@@ -2657,9 +2657,36 @@ void RAGreedy::reportStats() {
   for (MachineLoop *L : *Loops)
     Stats.add(reportStats(L));
   // Process non-loop blocks.
-  for (MachineBasicBlock &MBB : *MF)
+  std::vector<int> PunishedCSR;
+  for (MachineBasicBlock &MBB : *MF) {
     if (!Loops->getLoopFor(&MBB))
       Stats.add(computeStats(MBB));
+    for (MachineInstr &MI : MBB) {
+      for (int i = 0; i < MI.getNumOperands(); ++i) {
+        if (!MI.getOperand(i).isReg()) {
+          continue;
+        }
+        const Register &Reg = MI.getOperand(i).getReg();
+        MCRegister PhysReg;
+        if (Reg.isPhysical()) {
+          PhysReg = Reg.asMCReg();
+        } else if (Reg.isVirtual()) {
+          PhysReg = VRM->getPhys(Reg);
+        } else {
+          continue;
+        }
+        MCRegister CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg);
+        if (!CSR) {
+          continue;
+        }
+        if (std::find(PunishedCSR.begin(), PunishedCSR.end(), CSR.id()) == PunishedCSR.end()) {
+          PunishedCSR.push_back(CSR.id());
+          Stats.Spills += 1;
+          Stats.SpillsCost += CSRCost.getFrequency();
+        }
+      }
+    }
+  }
   if (!Stats.isEmpty()) {
     using namespace ore;
 
