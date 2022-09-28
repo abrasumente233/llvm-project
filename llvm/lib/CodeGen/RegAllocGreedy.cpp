@@ -153,6 +153,12 @@ static cl::opt<bool> ReorderRegistersInTryAssign(
              "non-interfering when assigning them."),
     cl::init(true), cl::NotHidden);
 
+static cl::opt<bool> PunishCSRInTryAssign(
+    "punish-csr-in-assign",
+    cl::desc("Only assign live ranges to callee-save registers if there is "
+             "no other choice"),
+    cl::init(true), cl::NotHidden);
+
 static RegisterRegAlloc greedyRegAlloc("greedy", "greedy register allocator",
                                        createGreedyRegisterAllocator);
 
@@ -442,11 +448,16 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
       if (!Matrix->checkInterference(VirtReg, *I)) {
         int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I) - RegCosts[*I];
         bool IsCSRFirstUse = EvictAdvisor->isUnusedCalleeSavedReg(*I);
-        if (FoundNotCSRFirstUse && IsCSRFirstUse) {
+        if (FoundNotCSRFirstUse && IsCSRFirstUse && PunishCSRInTryAssign) {
           continue;
         }
         LLVM_DEBUG(dbgs() << "2 Addr benefit " << RegTwoAddrBenefit << "\n");
-        if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit || (!FoundNotCSRFirstUse && !IsCSRFirstUse)) {
+        // We have not found a non-csr register, and we are no csr register
+        // => We are definitely better!
+        bool PickAnywaysToPunishCSR =
+            PunishCSRInTryAssign && !FoundNotCSRFirstUse && !IsCSRFirstUse;
+        if (!PhysReg || RegTwoAddrBenefit > TwoAddrBenefit ||
+            PickAnywaysToPunishCSR) {
           if (PhysReg) {
             LLVM_DEBUG(dbgs() << "Changed physical register assignment from "
                               << TRI->getRegAsmName(PhysReg) << " ("
@@ -2682,7 +2693,7 @@ void RAGreedy::reportStats() {
         if (std::find(PunishedCSR.begin(), PunishedCSR.end(), CSR.id()) == PunishedCSR.end()) {
           PunishedCSR.push_back(CSR.id());
           Stats.Spills += 1;
-          Stats.SpillsCost += MBFI->getEntryFreq();
+          Stats.SpillsCost += 1;
         }
       }
     }
