@@ -446,7 +446,7 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
     for (auto I = Order.begin(), E = Order.end(); I != E; ++I) {
       assert(*I);
       if (!Matrix->checkInterference(VirtReg, *I)) {
-        int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I) - RegCosts[*I];
+        int RegTwoAddrBenefit = getTwoAddrBenefit(VirtReg, *I);
         bool IsCSRFirstUse = EvictAdvisor->isUnusedCalleeSavedReg(*I);
         if (FoundNotCSRFirstUse && IsCSRFirstUse && PunishCSRInTryAssign) {
           continue;
@@ -2694,6 +2694,8 @@ void RAGreedy::reportStats() {
           PunishedCSR.push_back(CSR.id());
           Stats.Spills += 1;
           Stats.SpillsCost += 1;
+          Stats.Reloads += 1;
+          Stats.ReloadsCost += 1;
         }
       }
     }
