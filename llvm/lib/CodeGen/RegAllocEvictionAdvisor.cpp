@@ -234,13 +234,18 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
   assert(VirtReg.reg().isVirtual() && "Reg was not virtual");
   const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
 
-  MaxCost.CompressibleWeight = CompressibleUsedAsTieBreaker
+  const auto AtStart = MaxCost.MaxWeight;
+
+  EvictionCost CurrentMaxCost = MaxCost;
+  CurrentMaxCost.CompressibleWeight = CompressibleUsedAsTieBreaker
                                    ? getCompressibleWeight(VirtReg, MRI, RTPF)
                                    : 0;
   // We need to adjust the weight of our input too to ensure a fair comparison
-  MaxCost.MaxWeight =
-      MaxCost.MaxWeight * (1 - CompressibleInfluence) +
+  CurrentMaxCost.MaxWeight =
+      CurrentMaxCost.MaxWeight * (1 - CompressibleInfluence) +
       CompressibleInfluence * getCompressibleWeight(VirtReg, MRI, RTPF);
+
+  assert(AtStart == MaxCost.MaxWeight);
 
   EvictionCost Cost;
   for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
@@ -292,15 +297,15 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       bool BreaksHint = VRM->hasPreferredPhys(Intf->reg());
       // Update eviction cost.
       Cost.BrokenHints += BreaksHint;
-      float compressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
+      float CompressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
       float OtherWeight =
           Intf->weight() * (1 - CompressibleInfluence) +
-          CompressibleInfluence * compressibleWeight;
+          CompressibleInfluence * CompressibleWeight;
       Cost.MaxWeight = std::max(Cost.MaxWeight, OtherWeight);
       Cost.CompressibleWeight =
-          CompressibleUsedAsTieBreaker ? compressibleWeight : 0;
+          CompressibleUsedAsTieBreaker ? CompressibleWeight : 0;
       // Abort if this would be too expensive.
-      if (!(Cost < MaxCost))
+      if (!(Cost < CurrentMaxCost))
         return false;
       if (Urgent)
         continue;
@@ -310,7 +315,7 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       // If !MaxCost.isMax(), then we're just looking for a cheap register.
       // Evicting another local live range in this case could lead to suboptimal
       // coloring.
-      if (!MaxCost.isMax() && IsLocal && LIS->intervalIsInOneMBB(*Intf) &&
+      if (!CurrentMaxCost.isMax() && IsLocal && LIS->intervalIsInOneMBB(*Intf) &&
           (!EnableLocalReassign || !canReassign(*Intf, PhysReg))) {
         return false;
       }
