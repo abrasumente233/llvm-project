@@ -313,6 +313,10 @@ public:
 
   static char ID;
 
+  unsigned getDefUseCount(const LiveInterval &) const;
+  unsigned getTwoAddrBenefit(const LiveInterval &, MCRegister) const;
+  unsigned getTwoAddrBenefit(const LiveInterval &) const;
+
 private:
   MCRegister selectOrSplitImpl(const LiveInterval &,
                                SmallVectorImpl<Register> &, SmallVirtRegSet &,
@@ -340,8 +344,6 @@ private:
                                   const LiveInterval &VirtReg,
                                   SmallLISet &RecoloringCandidates,
                                   const SmallVirtRegSet &FixedRegisters);
-
-  unsigned getTwoAddrBenefit(const LiveInterval &, MCRegister);
 
   MCRegister tryAssign(const LiveInterval &, AllocationOrder &,
                        SmallVectorImpl<Register> &, const SmallVirtRegSet &);

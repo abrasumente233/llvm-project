@@ -141,6 +141,12 @@ static cl::opt<bool> GreedyReverseLocalAssignment(
              "shorter local live ranges will tend to be allocated first"),
     cl::Hidden);
 
+static cl::opt<float> CompressibleInfluence(
+    "live-interval-compressible-influence", cl::NotHidden,
+    cl::desc("The influence on a global live interval's compressibility on"
+	     "its priority."),
+    cl::init(0.5), cl::Hidden);
+
 static cl::opt<unsigned> CompressionHintBreakingLimit(
     "hint-breaking-limit", cl::NotHidden,
     cl::desc("The number of compression opportunities required before the "
@@ -361,6 +367,14 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
       // interference.  Mark a bit to prioritize global above local ranges.
       Prio = Size;
       GlobalBit = 1;
+
+      if (CompressibleInfluence > 0) {
+	unsigned Benefit = RA.getTwoAddrBenefit(LI);
+	unsigned DefUse = RA.getDefUseCount(LI);
+
+	double Compressibility = (double) Benefit / (double) DefUse;
+	Prio = Prio * ((1 - CompressibleInfluence) + CompressibleInfluence * Compressibility);
+      }
     }
 
     // Priority bit layout:
@@ -399,18 +413,70 @@ const LiveInterval *RAGreedy::dequeue() { return dequeue(Queue); }
 const LiveInterval *RAGreedy::dequeue(PQueue &CurQueue) {
   if (CurQueue.empty())
     return nullptr;
-  LiveInterval *LI = &LIS->getInterval(~CurQueue.top().second);
-  CurQueue.pop();
-  return LI;
+
+  LiveInterval *LI;
+
+  while (true) {
+    std::pair<unsigned, unsigned> Top = CurQueue.top();
+    unsigned Prio = Top.first;
+    CurQueue.pop();
+    LI = &LIS->getInterval(~Top.second);
+
+    if (PriorityAdvisor->isGlobalPriority(Prio)) {
+      // Re-check compressibility
+      unsigned NewPrio = PriorityAdvisor->getPriority(*LI);
+
+      if (NewPrio < Prio) {
+	enqueue(CurQueue, LI);
+	continue;
+      }
+    }
+
+    return LI;
+  }
 }
 
 //===----------------------------------------------------------------------===//
 //                            Direct Assignment
 //===----------------------------------------------------------------------===//
 
+unsigned RAGreedy::getDefUseCount(const LiveInterval &VirtReg) const {
+  unsigned Count = 0;
+
+  for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
+    Count++;
+  }
+  for (const auto &MI : MRI->def_instructions(VirtReg.reg())) {
+    Count++;
+  }
+
+  return Count;
+}
+
 unsigned RAGreedy::getTwoAddrBenefit(const LiveInterval &VirtReg,
-                                  MCRegister PhysReg) {
+                                  MCRegister PhysReg) const {
   const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
+
+  LLVM_DEBUG(dbgs() << " Looking for benefits for " << VirtReg << "\n");
+
+  unsigned Benefit = 0;
+
+  for (const auto &MI : MRI->use_instructions(VirtReg.reg())) {
+    if (TII->isPotentiallyCompressible(MI, RTPF)) {
+      Benefit++;
+    }
+  }
+  for (const auto &MI : MRI->def_instructions(VirtReg.reg())) {
+    if (TII->isPotentiallyCompressible(MI, RTPF)) {
+      Benefit++;
+    }
+  }
+
+  return Benefit;
+}
+
+unsigned RAGreedy::getTwoAddrBenefit(const LiveInterval &VirtReg) const {
+  const RegToPhysFunction RTPF(VRM, Register(1000), MCRegister(0));
 
   LLVM_DEBUG(dbgs() << " Looking for benefits for " << VirtReg << "\n");
 
