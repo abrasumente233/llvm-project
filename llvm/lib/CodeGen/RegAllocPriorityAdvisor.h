@@ -34,6 +34,8 @@ public:
   RegAllocPriorityAdvisor(const MachineFunction &MF, const RAGreedy &RA,
                           SlotIndexes *const Indexes);
 
+  bool isGlobalPriority(unsigned Prio) const;
+
 protected:
   const RAGreedy &RA;
   LiveIntervals *const LIS;

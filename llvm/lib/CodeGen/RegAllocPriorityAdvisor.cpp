@@ -110,3 +110,12 @@ RegAllocPriorityAdvisor::RegAllocPriorityAdvisor(const MachineFunction &MF,
       RegClassPriorityTrumpsGlobalness(
           RA.getRegClassPriorityTrumpsGlobalness()),
       ReverseLocalAssignment(RA.getReverseLocalAssignment()) {}
+
+bool RegAllocPriorityAdvisor::isGlobalPriority(unsigned Prio) const
+{
+  if (RegClassPriorityTrumpsGlobalness) {
+    return (Prio & (1 << 24)) != 0;
+  } else {
+    return (Prio & (1 << 29)) != 0;
+  }
+}
