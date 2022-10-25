@@ -80,7 +80,7 @@ enum LiveRangeStage {
 struct EvictionCost {
   unsigned BrokenHints = 0; ///< Total number of broken hints.
   float MaxWeight = 0;      ///< Maximum spill weight evicted.
-  float CompressibleWeight = 0;
+  float CompressibleAdvantage = 0; ///< How much more compressible is the new live-interval than the ones to be evicted.
 
   EvictionCost() = default;
 
@@ -90,20 +90,9 @@ struct EvictionCost {
 
   void setBrokenHints(unsigned NHints) { BrokenHints = NHints; }
 
-  bool operator<(const EvictionCost &O) const {
-    bool smaller =
-        std::tie(BrokenHints, MaxWeight) < std::tie(O.BrokenHints, O.MaxWeight);
-    if (smaller) {
-      return smaller;
-    }
-    DEBUG_WITH_TYPE("regallocevictad", dbgs()
-                                           << "********** TIED **********\n"
-                                           << "  " << CompressibleWeight
-                                           << " vs " << O.CompressibleWeight);
+  float compressionScore() const;
 
-    // The compression weight is a bonus
-    return CompressibleWeight < O.CompressibleWeight;
-  }
+  bool operator<(const EvictionCost &O) const;
 };
 
 /// Interface to the eviction advisor, which is responsible for making a
