@@ -135,6 +135,55 @@ StringRef RegAllocEvictionAdvisorAnalysis::getPassName() const {
   llvm_unreachable("Unknown advisor kind");
 }
 
+float EvictionCost::compressionScore() const {
+  return (1 - CompressibleInfluence) * MaxWeight +
+      CompressibleInfluence * CompressibleAdvantage;
+}
+
+bool EvictionCost::operator<(const EvictionCost &O) const {
+  if (CompressibleInfluence == 0.0) {
+    bool smaller =
+      std::tie(BrokenHints, MaxWeight) < std::tie(O.BrokenHints, O.MaxWeight);
+    if (smaller) {
+      return true;
+    }
+
+    bool bigger =
+      std::tie(BrokenHints, MaxWeight) < std::tie(O.BrokenHints, O.MaxWeight);
+    if (bigger) {
+      return false;
+    }
+
+    if (CompressibleUsedAsTieBreaker) {
+      return CompressibleAdvantage < O.CompressibleAdvantage;
+    } else {
+      return false;
+    }
+
+  } else {
+    float MyScore = compressionScore();
+    float OtherScore = O.compressionScore();
+
+    bool smaller =
+      std::tie(BrokenHints, MyScore) < std::tie(O.BrokenHints, OtherScore);
+    if (smaller) {
+      return true;
+    }
+
+    bool bigger =
+      std::tie(BrokenHints, MyScore) < std::tie(O.BrokenHints, OtherScore);
+    if (bigger) {
+      return false;
+    }
+
+    if (CompressibleUsedAsTieBreaker) {
+      return CompressibleAdvantage < O.CompressibleAdvantage;
+    } else {
+      return false;
+    }
+  }
+}
+
 RegAllocEvictionAdvisor::RegAllocEvictionAdvisor(const MachineFunction &MF,
                                                  const RAGreedy &RA)
     : MF(MF), RA(RA), Matrix(RA.getInterferenceMatrix()),
@@ -235,20 +284,9 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
   assert(VirtReg.reg().isVirtual() && "Reg was not virtual");
   const RegToPhysFunction RTPF(VRM, VirtReg.reg(), PhysReg);
 
-  const auto AtStart = MaxCost.MaxWeight;
-
-  EvictionCost CurrentMaxCost = MaxCost;
-  CurrentMaxCost.CompressibleWeight = CompressibleUsedAsTieBreaker
-                                   ? getCompressibleWeight(VirtReg, MRI, RTPF)
-                                   : 0;
-  // We need to adjust the weight of our input too to ensure a fair comparison
-  CurrentMaxCost.MaxWeight =
-      CurrentMaxCost.MaxWeight * (1 - CompressibleInfluence) +
-      CompressibleInfluence * getCompressibleWeight(VirtReg, MRI, RTPF);
-
-  assert(AtStart == MaxCost.MaxWeight);
-
   EvictionCost Cost;
+  Cost.CompressibleAdvantage = -getCompressibleWeight(VirtReg, MRI, RTPF);
+
   for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units) {
     LiveIntervalUnion::Query &Q = Matrix->query(VirtReg, *Units);
     // If there is 10 or more interferences, chances are one is heavier.
@@ -298,15 +336,10 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       bool BreaksHint = VRM->hasPreferredPhys(Intf->reg());
       // Update eviction cost.
       Cost.BrokenHints += BreaksHint;
-      float CompressibleWeight = getCompressibleWeight(*Intf, MRI, RTPF);
-      float OtherWeight =
-          Intf->weight() * (1 - CompressibleInfluence) +
-          CompressibleInfluence * CompressibleWeight;
-      Cost.MaxWeight = std::max(Cost.MaxWeight, OtherWeight);
-      Cost.CompressibleWeight =
-          CompressibleUsedAsTieBreaker ? CompressibleWeight : 0;
+      Cost.MaxWeight = std::max(Cost.MaxWeight, Intf->weight());
+      Cost.CompressibleAdvantage += getCompressibleWeight(*Intf, MRI, RTPF);
       // Abort if this would be too expensive.
-      if (!(Cost < CurrentMaxCost))
+      if (!(Cost < MaxCost))
         return false;
       if (Urgent)
         continue;
@@ -316,7 +349,7 @@ bool DefaultEvictionAdvisor::canEvictInterferenceBasedOnCost(
       // If !MaxCost.isMax(), then we're just looking for a cheap register.
       // Evicting another local live range in this case could lead to suboptimal
       // coloring.
-      if (!CurrentMaxCost.isMax() && IsLocal && LIS->intervalIsInOneMBB(*Intf) &&
+      if (!MaxCost.isMax() && IsLocal && LIS->intervalIsInOneMBB(*Intf) &&
           (!EnableLocalReassign || !canReassign(*Intf, PhysReg))) {
         return false;
       }
