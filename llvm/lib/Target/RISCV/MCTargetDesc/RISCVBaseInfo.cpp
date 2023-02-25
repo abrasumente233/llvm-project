@@ -13,6 +13,7 @@
 
 #include "RISCVBaseInfo.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -103,8 +104,7 @@ void validate(const Triple &TT, const FeatureBitset &FeatureBits) {
     report_fatal_error("RV32 target requires an RV32 CPU");
   if (TT.isArch64Bit() && FeatureBits[RISCV::FeatureRV32E])
     report_fatal_error("RV32E can't be enabled for an RV64 target");
-  if (FeatureBits[RISCV::Feature32Bit] &&
-      FeatureBits[RISCV::Feature64Bit])
+  if (FeatureBits[RISCV::Feature32Bit] && FeatureBits[RISCV::Feature64Bit])
     report_fatal_error("RV32 and RV64 can't be combined");
 }
 
@@ -202,6 +202,7 @@ unsigned RISCVVType::getSEWLMULRatio(unsigned SEW, RISCVII::VLMUL VLMul) {
 // Include the auto-generated portion of the compress emitter.
 #define GEN_UNCOMPRESS_INSTR
 #define GEN_COMPRESS_INSTR
+#define GEN_GET_COMPRESSIBLE_REGS
 #include "RISCVGenCompressInstEmitter.inc"
 
 bool RISCVRVC::compress(MCInst &OutInst, const MCInst &MI,
