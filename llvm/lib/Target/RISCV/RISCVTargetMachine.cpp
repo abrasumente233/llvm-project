@@ -260,6 +260,7 @@ public:
   void addPreSched2() override;
   void addMachineSSAOptimization() override;
   void addPreRegAlloc() override;
+  bool addPreRewrite() override;
   void addPostRegAlloc() override;
   void addOptimizedRegAlloc() override;
 };
@@ -362,6 +363,12 @@ void RISCVPassConfig::addOptimizedRegAlloc() {
     insertPass(&DetectDeadLanesID, &RISCVInitUndefID);
 
   TargetPassConfig::addOptimizedRegAlloc();
+}
+
+bool RISCVPassConfig::addPreRewrite() {
+  // if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
+  addPass(createRISCVRegCompressionPrioritiesPass());
+  return true;
 }
 
 void RISCVPassConfig::addPostRegAlloc() {
