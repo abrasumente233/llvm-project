@@ -12,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "RISCVBaseInfo.h"
+#include "RISCVSubtarget.h"
 #include "llvm/ADT/ArrayRef.h"
-#include "llvm/CodeGen/Register.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -213,6 +213,12 @@ bool RISCVRVC::compress(MCInst &OutInst, const MCInst &MI,
 bool RISCVRVC::uncompress(MCInst &OutInst, const MCInst &MI,
                           const MCSubtargetInfo &STI) {
   return uncompressInst(OutInst, MI, STI);
+}
+
+SmallVector<Register, 4>
+RISCVRVC::getCompressibleRegs(const MachineInstr &MI,
+                              const RISCVSubtarget &STI) {
+  return getCompressibleRegsInInst(MI, STI);
 }
 
 } // namespace llvm

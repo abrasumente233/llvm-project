@@ -16,6 +16,8 @@
 #include "MCTargetDesc/RISCVMCTargetDesc.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/CodeGen/MachineInstr.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/MC/MCInstrDesc.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/Support/RISCVISAInfo.h"
@@ -157,13 +159,9 @@ static inline bool hasMergeOp(uint64_t TSFlags) {
   return TSFlags & HasMergeOpMask;
 }
 /// \returns true if there is a SEW operand for the instruction.
-static inline bool hasSEWOp(uint64_t TSFlags) {
-  return TSFlags & HasSEWOpMask;
-}
+static inline bool hasSEWOp(uint64_t TSFlags) { return TSFlags & HasSEWOpMask; }
 /// \returns true if there is a VL operand for the instruction.
-static inline bool hasVLOp(uint64_t TSFlags) {
-  return TSFlags & HasVLOpMask;
-}
+static inline bool hasVLOp(uint64_t TSFlags) { return TSFlags & HasVLOpMask; }
 /// \returns true if there is a vector policy operand for this instruction.
 static inline bool hasVecPolicyOp(uint64_t TSFlags) {
   return TSFlags & HasVecPolicyOpMask;
@@ -269,12 +267,7 @@ enum OperandType : unsigned {
 
 // Describes the predecessor/successor bits used in the FENCE instruction.
 namespace RISCVFenceField {
-enum FenceField {
-  I = 8,
-  O = 4,
-  R = 2,
-  W = 1
-};
+enum FenceField { I = 8, O = 4, R = 2, W = 1 };
 }
 
 // Describes the supported floating point rounding mode encodings.
@@ -375,6 +368,7 @@ struct RISCVOpcode {
 
 #define GET_RISCVOpcodesList_DECL
 #include "RISCVGenSearchableTables.inc"
+#include "llvm/CodeGen/Register.h"
 } // end namespace RISCVInsnOpcode
 
 namespace RISCVABI {
@@ -469,9 +463,13 @@ unsigned getSEWLMULRatio(unsigned SEW, RISCVII::VLMUL VLMul);
 
 } // namespace RISCVVType
 
+class RISCVSubtarget;
+
 namespace RISCVRVC {
 bool compress(MCInst &OutInst, const MCInst &MI, const MCSubtargetInfo &STI);
 bool uncompress(MCInst &OutInst, const MCInst &MI, const MCSubtargetInfo &STI);
+SmallVector<Register, 4> getCompressibleRegs(const MachineInstr &MI,
+                                             const RISCVSubtarget &STI);
 } // namespace RISCVRVC
 
 } // namespace llvm

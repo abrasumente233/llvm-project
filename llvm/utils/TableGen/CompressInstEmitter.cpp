@@ -636,9 +636,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     FuncH << "static bool isCompressibleInst(const MachineInstr &MI,\n";
     FuncH.indent(31) << "const " << TargetName << "Subtarget &STI) {\n";
   } else if (EType == EmitterType::GetCompressibleRegs) {
-    FuncH << "static SmallVector<Register, 4> getCompressibleRegs(const "
-             "MCInst &MI,\n";
-    FuncH.indent(52) << "const MCSubtargetInfo &STI) {\n";
+    FuncH << "static SmallVector<Register, 4> getCompressibleRegsInInst(const MachineInstr &MI,\n";
+    FuncH.indent(52) << "const " << TargetName << "Subtarget &STI) {\n";
   }
 
   if (CompressPatterns.empty()) {
@@ -671,7 +670,6 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                               EType == EmitterType::GetCompressibleRegs;
   bool CompressOrUncompress =
       EType == EmitterType::Compress || EType == EmitterType::Uncompress;
-  bool GetCompRegs = EType == EmitterType::GetCompressibleRegs;
 
   std::string ValidatorName = (TargetName + "ValidateMCOperandFor").str();
   const char *Suffix = nullptr;
@@ -681,9 +679,6 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     break;
   case EmitterType::Uncompress:
     Suffix = "Uncompress";
-    break;
-  case EmitterType::GetCompressibleRegs:
-    Suffix = "GetCompRegs";
     break;
   default:
     Suffix = "";
@@ -853,7 +848,7 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                 << "OutInst.addOperand(MI.getOperand(" << OpIdx << "));\n";
         } else {
           // Handling immediate operands.
-          if (CompressOrUncompress || GetCompRegs) {
+          if (CompressOrUncompress) {
             unsigned Entry =
                 getPredicates(MCOpPredicateMap, MCOpPredicates, DestOperand.Rec,
                               "MCOperandPredicate");
@@ -877,7 +872,7 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
         break;
       }
       case OpData::Imm: {
-        if (CompressOrUncompress || GetCompRegs) {
+        if (CompressOrUncompress) {
           unsigned Entry = getPredicates(MCOpPredicateMap, MCOpPredicates,
                                          DestOperand.Rec, "MCOperandPredicate");
           CondStream.indent(6)
@@ -994,7 +989,7 @@ void CompressInstEmitter::run(raw_ostream &o) {
   emitCompressInstEmitter(o, EmitterType::Uncompress);
   // Generate isCompressibleInst() function.
   emitCompressInstEmitter(o, EmitterType::CheckCompress);
-  // Generate getCompressibleRegs() function.
+  // Generate getCompressibleRegsInInst() function.
   emitCompressInstEmitter(o, EmitterType::GetCompressibleRegs);
 }
 
