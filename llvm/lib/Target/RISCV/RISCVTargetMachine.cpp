@@ -356,6 +356,7 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
+  addPass(createRISCVRegCompressionPrioritiesPass());
 }
 
 void RISCVPassConfig::addOptimizedRegAlloc() {
@@ -367,8 +368,8 @@ void RISCVPassConfig::addOptimizedRegAlloc() {
 
 bool RISCVPassConfig::addPreRewrite() {
   // if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
-  addPass(createRISCVRegCompressionPrioritiesPass());
-  return true;
+  // addPass(createRISCVRegCompressionPrioritiesPass());
+  return false;
 }
 
 void RISCVPassConfig::addPostRegAlloc() {

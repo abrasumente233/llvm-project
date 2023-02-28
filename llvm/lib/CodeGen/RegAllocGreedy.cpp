@@ -354,11 +354,18 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
     // else
     //   29 Global bit
     //   28-24 AllocPriority
-    // 0-23 Size/Instr distance
+    // 19~23 Compression priority
+    // 0-18 Size/Instr distance
 
     // Clamp the size to fit with the priority masking scheme
-    Prio = std::min(Prio, (unsigned)maxUIntN(24));
+    // TODO: Test the regression when only making Size/Instr distance 18 bits.
+    // We might want to expand this to 64-bit.
+    Prio = std::min(Prio, (unsigned)maxUIntN(18));
     assert(isUInt<5>(RC.AllocationPriority) && "allocation priority overflow");
+
+    unsigned CompressionPriority = LI.getCompressionPriority();
+    assert(isUInt<5>(CompressionPriority) && "compression priority overflow");
+    Prio |= CompressionPriority << 19;
 
     if (RegClassPriorityTrumpsGlobalness)
       Prio |= RC.AllocationPriority << 25 | GlobalBit << 24;

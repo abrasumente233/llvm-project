@@ -13,9 +13,11 @@
 #include "RISCV.h"
 #include "RISCVSubtarget.h"
 #include "llvm/ADT/IndexedMap.h"
+#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 
 using namespace llvm;
@@ -43,15 +45,18 @@ public:
 protected:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();
+    AU.addRequired<LiveIntervals>();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
 public:
   bool runOnMachineFunction(MachineFunction &MF) override {
+    errs() << "Hey!\n";
     if (skipFunction(MF.getFunction()))
       return false;
 
     const auto &STI = MF.getSubtarget<RISCVSubtarget>();
+    auto &LIS = getAnalysis<LiveIntervals>();
 
     Virt2PriorityMap.clear();
     unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();
@@ -90,6 +95,15 @@ public:
       errs() << printReg(Virt) << ": " << Priority << "\n";
     }
 
+    // Assign priorities to live intervals
+    //    for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {
+    //      auto Virt = Register::index2VirtReg(Idx); // Probably non-existent?
+    //      auto Priority = Virt2PriorityMap[Virt];
+    //      auto &Interval = LIS.getInterval(Virt);
+    //
+    //      Interval.setCompressionPriority(Priority);
+    //    }
+
     // MF.print(errs());
 
     return false;
@@ -99,9 +113,13 @@ public:
 
 char RISCVRegCompressionPriorities::ID = 0;
 
-INITIALIZE_PASS(RISCVRegCompressionPriorities,
-                "riscv-reg-compression-priorities",
-                "Analyze register compression priorities", false, true)
+INITIALIZE_PASS_BEGIN(RISCVRegCompressionPriorities,
+                      "riscv-reg-compression-priorities",
+                      "Analyze register compression priorities", false, true)
+INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
+INITIALIZE_PASS_END(RISCVRegCompressionPriorities,
+                    "riscv-reg-compression-priorities",
+                    "Analyze register compression priorities", false, true)
 
 FunctionPass *llvm::createRISCVRegCompressionPrioritiesPass() {
   return new RISCVRegCompressionPriorities();
