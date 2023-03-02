@@ -13,7 +13,6 @@
 #include "RISCV.h"
 #include "RISCVSubtarget.h"
 #include "llvm/ADT/IndexedMap.h"
-#include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
@@ -45,7 +44,6 @@ public:
 protected:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesAll();
-    AU.addRequired<LiveIntervals>();
     MachineFunctionPass::getAnalysisUsage(AU);
   }
 
@@ -56,7 +54,6 @@ public:
       return false;
 
     const auto &STI = MF.getSubtarget<RISCVSubtarget>();
-    auto &LIS = getAnalysis<LiveIntervals>();
 
     Virt2PriorityMap.clear();
     unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();
@@ -116,7 +113,7 @@ char RISCVRegCompressionPriorities::ID = 0;
 INITIALIZE_PASS_BEGIN(RISCVRegCompressionPriorities,
                       "riscv-reg-compression-priorities",
                       "Analyze register compression priorities", false, true)
-INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
+// INITIALIZE_PASS_DEPENDENCY(LiveIntervals)
 INITIALIZE_PASS_END(RISCVRegCompressionPriorities,
                     "riscv-reg-compression-priorities",
                     "Analyze register compression priorities", false, true)

@@ -712,15 +712,12 @@ namespace llvm {
                                    /// ranges.
     const Register Reg; // the register or stack slot of this interval.
     float Weight = 0.0; // weight of this interval
-    unsigned CompressionPriority = 0;
 
   public:
     Register reg() const { return Reg; }
     float weight() const { return Weight; }
     void incrementWeight(float Inc) { Weight += Inc; }
     void setWeight(float Value) { Weight = Value; }
-    void setCompressionPriority(unsigned Priority) { CompressionPriority = Priority; }
-    unsigned getCompressionPriority() const { return CompressionPriority; }
 
     LiveInterval(unsigned Reg, float Weight) : Reg(Reg), Weight(Weight) {}
 
