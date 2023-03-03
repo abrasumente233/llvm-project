@@ -104,7 +104,7 @@ StringRef RegAllocPriorityAdvisorAnalysis::getPassName() const {
 RegAllocPriorityAdvisor::RegAllocPriorityAdvisor(const MachineFunction &MF,
                                                  const RAGreedy &RA,
                                                  SlotIndexes *const Indexes)
-    : RA(RA), LIS(RA.getLiveIntervals()), VRM(RA.getVirtRegMap()),
+    : MF(MF), RA(RA), LIS(RA.getLiveIntervals()), VRM(RA.getVirtRegMap()),
       MRI(&VRM->getRegInfo()), TRI(MF.getSubtarget().getRegisterInfo()),
       RegClassInfo(RA.getRegClassInfo()), Indexes(Indexes),
       RegClassPriorityTrumpsGlobalness(

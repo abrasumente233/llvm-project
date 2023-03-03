@@ -53,10 +53,11 @@ public:
     if (skipFunction(MF.getFunction()))
       return false;
 
-    const auto &STI = MF.getSubtarget<RISCVSubtarget>();
+    auto &STI = MF.getSubtarget<RISCVSubtarget>();
 
     Virt2PriorityMap.clear();
     unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();
+    errs() << "NumRegs " << NumRegs << "\n";
     Virt2PriorityMap.resize(NumRegs);
 
     for (auto &MBB : MF) {
@@ -91,6 +92,9 @@ public:
 
       errs() << printReg(Virt) << ": " << Priority << "\n";
     }
+
+    // Save priorities to `RISCVSubtarget`
+    MF.setCompressionPriorityMap(Virt2PriorityMap);
 
     // Assign priorities to live intervals
     //    for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {

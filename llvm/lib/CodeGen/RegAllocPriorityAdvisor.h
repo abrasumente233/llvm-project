@@ -35,6 +35,7 @@ public:
                           SlotIndexes *const Indexes);
 
 protected:
+  const MachineFunction &MF;
   const RAGreedy &RA;
   LiveIntervals *const LIS;
   VirtRegMap *const VRM;
