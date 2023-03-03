@@ -49,7 +49,7 @@ protected:
 
 public:
   bool runOnMachineFunction(MachineFunction &MF) override {
-    errs() << "Hey!\n";
+    LLVM_DEBUG(dbgs() << "Hey!\n");
     if (skipFunction(MF.getFunction()))
       return false;
 
@@ -57,7 +57,7 @@ public:
 
     Virt2PriorityMap.clear();
     unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();
-    errs() << "NumRegs " << NumRegs << "\n";
+    LLVM_DEBUG(dbgs() << "NumRegs " << NumRegs << "\n");
     Virt2PriorityMap.resize(NumRegs);
 
     for (auto &MBB : MF) {
@@ -90,7 +90,7 @@ public:
       auto Virt = Register::index2VirtReg(Idx); // Probably non-existent?
       auto Priority = Virt2PriorityMap[Virt];
 
-      errs() << printReg(Virt) << ": " << Priority << "\n";
+      LLVM_DEBUG(dbgs() << printReg(Virt) << ": " << Priority << "\n");
     }
 
     // Save priorities to `RISCVSubtarget`

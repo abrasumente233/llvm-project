@@ -260,6 +260,7 @@ public:
   void addPreSched2() override;
   void addMachineSSAOptimization() override;
   void addPreRegAlloc() override;
+  void addRightBeforeRegAlloc() override;
   bool addPreRewrite() override;
   void addPostRegAlloc() override;
   void addOptimizedRegAlloc() override;
@@ -356,7 +357,6 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
-  addPass(createRISCVRegCompressionPrioritiesPass());
 }
 
 void RISCVPassConfig::addOptimizedRegAlloc() {
@@ -364,6 +364,10 @@ void RISCVPassConfig::addOptimizedRegAlloc() {
     insertPass(&DetectDeadLanesID, &RISCVInitUndefID);
 
   TargetPassConfig::addOptimizedRegAlloc();
+}
+
+void RISCVPassConfig::addRightBeforeRegAlloc() {
+  addPass(createRISCVRegCompressionPrioritiesPass());
 }
 
 bool RISCVPassConfig::addPreRewrite() {

@@ -391,6 +391,8 @@ protected:
   /// LLVMTargetMachine provides standard regalloc passes for most targets.
   virtual void addOptimizedRegAlloc();
 
+  virtual void addRightBeforeRegAlloc() {}
+
   /// addPreRewrite - Add passes to the optimized register allocation pipeline
   /// after register allocation is complete, but before virtual registers are
   /// rewritten to physical registers.

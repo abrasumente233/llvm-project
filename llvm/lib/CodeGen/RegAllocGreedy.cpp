@@ -339,13 +339,13 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
     // Priority bit layout:
     // 31 RS_Assign priority
     // 30 Preference priority
+    // 29~25 Compression priority
     // if (RegClassPriorityTrumpsGlobalness)
-    //   29-25 AllocPriority
-    //   24 GlobalBit
+    //   24-20 AllocPriority
+    //   19 GlobalBit
     // else
-    //   29 Global bit
-    //   28-24 AllocPriority
-    // 19~23 Compression priority
+    //   24 Global bit
+    //   23-19 AllocPriority
     // 0-18 Size/Instr distance
 
     // Clamp the size to fit with the priority masking scheme
@@ -354,24 +354,24 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
     Prio = std::min(Prio, (unsigned)maxUIntN(18));
     assert(isUInt<5>(RC.AllocationPriority) && "allocation priority overflow");
 
-    errs() << "RegClassPriorityTrumpsGlobalness: "
+    LLVM_DEBUG(dbgs() << "RegClassPriorityTrumpsGlobalness: "
            << RegClassPriorityTrumpsGlobalness << ", GlobalBit: " << GlobalBit
-           << ", AllocationPriority: " << RC.AllocationPriority << "\n";
+           << ", AllocationPriority: " << RC.AllocationPriority << "\n");
 
     const auto &Virt2Priority = MF.getCompressionPriorityMap();
     // FIXME: live range splitting is messing with us here.
     if (Reg.isVirtual() && Virt2Priority.size() != 0 &&
         Reg.virtRegIndex() < Virt2Priority.size()) {
       unsigned CompressionPriority = Virt2Priority[Reg];
-      errs() << Reg.virtRegIndex() << "  " << CompressionPriority << " ";
+      LLVM_DEBUG(dbgs() << Reg.virtRegIndex() << "  " << CompressionPriority << " ");
       assert(isUInt<5>(CompressionPriority) && "compression priority overflow");
-      Prio |= CompressionPriority << 19;
+      Prio |= CompressionPriority << 25;
     }
 
     if (RegClassPriorityTrumpsGlobalness)
-      Prio |= RC.AllocationPriority << 25 | GlobalBit << 24;
+      Prio |= RC.AllocationPriority << 20 | GlobalBit << 19;
     else
-      Prio |= GlobalBit << 29 | RC.AllocationPriority << 24;
+      Prio |= GlobalBit << 24 | RC.AllocationPriority << 19;
 
     // Mark a higher bit to prioritize global and local above RS_Split.
     Prio |= (1u << 31);
@@ -381,7 +381,7 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
       Prio |= (1u << 30);
   }
 
-  errs() << " " << Prio << "\n";
+  LLVM_DEBUG(dbgs() << " " << Prio << "\n");
 
   return Prio;
 }
@@ -485,7 +485,7 @@ Register RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
 /// evictInterference - Evict any interferring registers that prevent VirtReg
 /// from being assigned to Physreg. This assumes that canEvictInterference
 /// returned true.
-void RAGreedy::evictInterference(const LiveInterval &VirtReg,
+bool RAGreedy::evictInterference(const LiveInterval &VirtReg,
                                  MCRegister PhysReg,
                                  SmallVectorImpl<Register> &NewVRegs) {
   // Make sure that VirtReg has a cascade number, and assign that cascade
@@ -505,6 +505,15 @@ void RAGreedy::evictInterference(const LiveInterval &VirtReg,
     // overlap the same register unit so we had different SubRanges queried
     // against it.
     ArrayRef<const LiveInterval *> IVR = Q.interferingVRegs();
+    for (auto I : IVR) {
+      auto PriorityMap = MF->getCompressionPriorityMap();
+      if (PriorityMap.size() == 0) break;
+      if (PriorityMap.size() <= VirtReg.reg().virtRegIndex()) break;
+      if (PriorityMap.size() <= I->reg().virtRegIndex()) break;
+      if (PriorityMap[I->reg()] > PriorityMap[VirtReg.reg()]) {
+        return false;
+      }
+    }
     Intfs.append(IVR.begin(), IVR.end());
   }
 
@@ -522,6 +531,8 @@ void RAGreedy::evictInterference(const LiveInterval &VirtReg,
     ++NumEvicted;
     NewVRegs.push_back(Intf->reg());
   }
+
+  return true;
 }
 
 /// Returns true if the given \p PhysReg is a callee saved register and has not
@@ -591,8 +602,11 @@ MCRegister RAGreedy::tryEvict(const LiveInterval &VirtReg,
 
   MCRegister BestPhys = EvictAdvisor->tryFindEvictionCandidate(
       VirtReg, Order, CostPerUseLimit, FixedRegisters);
-  if (BestPhys.isValid())
-    evictInterference(VirtReg, BestPhys, NewVRegs);
+  if (BestPhys.isValid()) {
+    if (!evictInterference(VirtReg, BestPhys, NewVRegs)) {
+      return 0;
+    }
+  }
   return BestPhys;
 }
 

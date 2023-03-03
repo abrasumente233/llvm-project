@@ -1401,6 +1401,10 @@ bool TargetPassConfig::addRegAssignAndRewriteFast() {
 }
 
 bool TargetPassConfig::addRegAssignAndRewriteOptimized() {
+
+  // Allow targets to run passes right before register allocation
+  addRightBeforeRegAlloc();
+
   // Add the selected register allocation pass.
   addPass(createRegAllocPass(true));
 
