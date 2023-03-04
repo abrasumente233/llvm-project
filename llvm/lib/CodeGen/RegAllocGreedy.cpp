@@ -486,7 +486,7 @@ Register RegAllocEvictionAdvisor::canReassign(const LiveInterval &VirtReg,
 /// evictInterference - Evict any interferring registers that prevent VirtReg
 /// from being assigned to Physreg. This assumes that canEvictInterference
 /// returned true.
-bool RAGreedy::evictInterference(const LiveInterval &VirtReg,
+void RAGreedy::evictInterference(const LiveInterval &VirtReg,
                                  MCRegister PhysReg,
                                  SmallVectorImpl<Register> &NewVRegs) {
   // Make sure that VirtReg has a cascade number, and assign that cascade
@@ -506,15 +506,6 @@ bool RAGreedy::evictInterference(const LiveInterval &VirtReg,
     // overlap the same register unit so we had different SubRanges queried
     // against it.
     ArrayRef<const LiveInterval *> IVR = Q.interferingVRegs();
-    for (auto I : IVR) {
-      auto PriorityMap = MF->getCompressionPriorityMap();
-      if (PriorityMap.size() == 0) break;
-      if (PriorityMap.size() <= VirtReg.reg().virtRegIndex()) break;
-      if (PriorityMap.size() <= I->reg().virtRegIndex()) break;
-      if (PriorityMap[I->reg()] > PriorityMap[VirtReg.reg()]) {
-        return false;
-      }
-    }
     Intfs.append(IVR.begin(), IVR.end());
   }
 
@@ -532,8 +523,6 @@ bool RAGreedy::evictInterference(const LiveInterval &VirtReg,
     ++NumEvicted;
     NewVRegs.push_back(Intf->reg());
   }
-
-  return true;
 }
 
 /// Returns true if the given \p PhysReg is a callee saved register and has not
@@ -604,9 +593,27 @@ MCRegister RAGreedy::tryEvict(const LiveInterval &VirtReg,
   MCRegister BestPhys = EvictAdvisor->tryFindEvictionCandidate(
       VirtReg, Order, CostPerUseLimit, FixedRegisters);
   if (BestPhys.isValid()) {
-    if (!evictInterference(VirtReg, BestPhys, NewVRegs)) {
-      return 0;
+    // Make sure we don't evict a VirtReg that has higher compression priority.
+
+    // Iterate over all interferring VirtRegs that's assigned to PhysReg,
+    // and if any of them has higher compression priority than `VirtReg`,
+    // bail out.
+    for (MCRegUnitIterator Units(BestPhys, TRI); Units.isValid(); ++Units) {
+      LiveIntervalUnion::Query &Q = Matrix->query(VirtReg, *Units);
+
+      ArrayRef<const LiveInterval *> IVR = Q.interferingVRegs();
+      for (auto I : IVR) {
+        auto PriorityMap = MF->getCompressionPriorityMap();
+        if (PriorityMap.size() == 0) break;
+        if (PriorityMap.size() <= VirtReg.reg().virtRegIndex()) break;
+        if (PriorityMap.size() <= I->reg().virtRegIndex()) break;
+        if (PriorityMap[I->reg()] > PriorityMap[VirtReg.reg()]) {
+          return 0;
+        }
+      }
     }
+
+    evictInterference(VirtReg, BestPhys, NewVRegs);
   }
   return BestPhys;
 }

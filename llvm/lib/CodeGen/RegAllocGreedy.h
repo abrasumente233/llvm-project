@@ -334,7 +334,7 @@ private:
   bool calcCompactRegion(GlobalSplitCandidate &);
   void splitAroundRegion(LiveRangeEdit &, ArrayRef<unsigned>);
   void calcGapWeights(MCRegister, SmallVectorImpl<float> &);
-  bool evictInterference(const LiveInterval &, MCRegister,
+  void evictInterference(const LiveInterval &, MCRegister,
                          SmallVectorImpl<Register> &);
   bool mayRecolorAllInterferences(MCRegister PhysReg,
                                   const LiveInterval &VirtReg,
