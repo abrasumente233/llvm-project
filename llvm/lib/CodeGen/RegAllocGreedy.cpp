@@ -364,6 +364,7 @@ unsigned DefaultPriorityAdvisor::getPriority(const LiveInterval &LI) const {
         Reg.virtRegIndex() < Virt2Priority.size()) {
       unsigned CompressionPriority = Virt2Priority[Reg];
       LLVM_DEBUG(dbgs() << Reg.virtRegIndex() << "  " << CompressionPriority << " ");
+      CompressionPriority = std::min(CompressionPriority, (unsigned)maxUIntN(5));
       assert(isUInt<5>(CompressionPriority) && "compression priority overflow");
       Prio |= CompressionPriority << 25;
     }
