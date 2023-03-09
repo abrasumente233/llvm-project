@@ -60,12 +60,12 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
   }
 
   // Print the priorities
-  for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {
-    auto Virt = Register::index2VirtReg(Idx); // Probably non-existent?
-    auto Priority = Virt2PriorityMap[Virt];
-
-    errs() << printReg(Virt) << ": " << Priority << "\n";
-  }
+  //  for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {
+  //    auto Virt = Register::index2VirtReg(Idx); // Probably non-existent?
+  //    auto Priority = Virt2PriorityMap[Virt];
+  //
+  //    errs() << printReg(Virt) << ": " << Priority << "\n";
+  //  }
 
   // MF.print(errs());
 

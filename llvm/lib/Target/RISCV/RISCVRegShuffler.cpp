@@ -80,10 +80,6 @@ SmallVector<MCRegister, 8> getCompressibleRegs() {
 }
 
 bool RISCVRegShuffler::isCompressibleReg(MCRegister PhysReg) {
-  //  errs() << printReg(PhysReg, TRI) << "'s RegCost is " <<
-  //  (int)RegCosts[PhysReg]
-  //         << "\n";
-
   // FIXME: We don't want to use X8, X9 unconditionally, because
   // these two are callee save and might introduce extra save/restore.
   //  return PhysReg == RISCV::X8 || PhysReg == RISCV::X9 ||
@@ -105,10 +101,6 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
   TRI = MF.getSubtarget().getRegisterInfo();
   MRI = &MF.getRegInfo();
   RegCosts = TRI->getRegisterCosts(MF);
-  //  BitVector RegSet =
-  //      MF.getRegInfo().getTargetRegisterInfo()->getAllocatableSet(MF);
-  //
-  //  errs() << "RegSet size = " << RegSet.size() << "\n";
 
   auto const &PriorityMap =
       getAnalysis<RISCVRegCompressionPriorities>().getPriorityMap();
@@ -154,8 +146,8 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     auto Reg = Register::index2VirtReg(RegIdx);
     auto &RegLI = LIS.getInterval(Reg);
 
-    errs() << "try to find better register for " << printReg(Reg)
-           << ", priority = " << Priority << "\n";
+    LLVM_DEBUG(dbgs() << "try to find better register for " << printReg(Reg)
+                      << ", priority = " << Priority << "\n");
 
     auto PhysReg = RegMap.getPhys(Reg);
     assert(PhysReg != MCRegister::NoRegister);
@@ -163,8 +155,8 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     // If this VReg is already allocated to a popular physical
     // register, we're happy.
     if (isCompressibleReg(PhysReg)) {
-      errs() << printReg(Reg) << " already has popular reg "
-             << printReg(PhysReg, TRI) << "\n";
+      LLVM_DEBUG(dbgs() << printReg(Reg) << " already has popular reg "
+                        << printReg(PhysReg, TRI) << "\n");
       continue;
     }
 
@@ -181,15 +173,16 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
       if (!isCompressibleReg(*RegClassPhys))
         continue;
 
-      errs() << "Found a popular register " << printReg(*RegClassPhys, TRI)
-             << ", checking interference\n";
+      LLVM_DEBUG(dbgs() << "Found a popular register "
+                        << printReg(*RegClassPhys, TRI)
+                        << ", checking interference\n");
 
       if (Matrix->checkInterference(RegLI, *RegClassPhys) ==
           LiveRegMatrix::IK_Free) {
         Matrix->unassign(RegLI);
         Matrix->assign(RegLI, *RegClassPhys);
-        errs() << "interference check passed, swapped ok.\n";
-        Swapped = true;
+        LLVM_DEBUG(dbgs() << "interference check passed, swapped ok.\n";
+                   Swapped = true);
       }
     }
 
@@ -246,9 +239,10 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     // Now we try to swap, if and only if the end result doesn't violate
     // interference rules.
     // TODO: Continue swapping.
-    errs() << "Preparing to swap, before = {" << printReg(Reg) << " -> "
-           << printReg(PhysReg, TRI) << ", " << printReg(IReg) << " -> "
-           << printReg(IPhysReg, TRI) << "}\n";
+    LLVM_DEBUG(dbgs() << "Preparing to swap, before = {" << printReg(Reg)
+                      << " -> " << printReg(PhysReg, TRI) << ", "
+                      << printReg(IReg) << " -> " << printReg(IPhysReg, TRI)
+                      << "}\n");
     Matrix->unassign(RegLI);
     Matrix->unassign(ILI);
     if (Matrix->checkInterference(RegLI, IPhysReg) == LiveRegMatrix::IK_Free &&
@@ -256,15 +250,15 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
       // Actually swap
       Matrix->assign(RegLI, IPhysReg);
       Matrix->assign(ILI, PhysReg);
-      errs() << "Swapped, before = {" << printReg(Reg) << " -> "
-             << printReg(PhysReg, TRI) << ", " << printReg(IReg) << " -> "
-             << printReg(IPhysReg, TRI) << "}\n";
+      LLVM_DEBUG(dbgs() << "Swapped, before = {" << printReg(Reg) << " -> "
+                        << printReg(PhysReg, TRI) << ", " << printReg(IReg)
+                        << " -> " << printReg(IPhysReg, TRI) << "}\n");
     } else {
       Matrix->assign(RegLI, PhysReg);
       Matrix->assign(ILI, IPhysReg);
-      errs() << "Fail to swap, before = {" << printReg(Reg) << " -> "
-             << printReg(PhysReg, TRI) << ", " << printReg(IReg) << " -> "
-             << printReg(IPhysReg, TRI) << "}\n";
+      LLVM_DEBUG(dbgs() << "Fail to swap, before = {" << printReg(Reg) << " -> "
+                        << printReg(PhysReg, TRI) << ", " << printReg(IReg)
+                        << " -> " << printReg(IPhysReg, TRI) << "}\n");
     }
   }
 
