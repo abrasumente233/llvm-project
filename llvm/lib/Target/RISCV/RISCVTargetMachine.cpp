@@ -367,7 +367,8 @@ void RISCVPassConfig::addOptimizedRegAlloc() {
 
 bool RISCVPassConfig::addPreRewrite() {
   // if (TM->getOptLevel() != CodeGenOpt::None && EnableRedundantCopyElimination)
-  addPass(createRISCVRegCompressionPrioritiesPass());
+  // addPass(createRISCVRegCompressionPrioritiesPass());
+  addPass(createRISCVRegShufflerPass());
   return true;
 }
 

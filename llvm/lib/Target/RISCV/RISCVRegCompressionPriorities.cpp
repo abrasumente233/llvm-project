@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RISCVRegCompressionPriorities.h"
 #include "RISCV.h"
 #include "RISCVSubtarget.h"
 #include "llvm/ADT/IndexedMap.h"
@@ -22,80 +23,54 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-reg-compression-priorities"
 
-namespace {
-class RISCVRegCompressionPriorities : public MachineFunctionPass {
-private:
-  // Virt2PriorityMap - This is a virtual to compression priority
-  // mapping, a.k.a the number of times a virtual register appears in
-  // compressible instructions. Each virtual register is required to have
-  // an entry in it, even if it doesn't appear in compressible instructions,
-  // in which case its priority is zero.
-  IndexedMap<unsigned, VirtReg2IndexFunctor> Virt2PriorityMap;
+bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
+    MachineFunction &MF) {
 
-public:
-  static char ID;
+  if (skipFunction(MF.getFunction()))
+    return false;
 
-  RISCVRegCompressionPriorities() : MachineFunctionPass(ID) {
-    initializeRISCVRegCompressionPrioritiesPass(
-        *PassRegistry::getPassRegistry());
-  }
+  const auto &STI = MF.getSubtarget<RISCVSubtarget>();
 
-protected:
-  void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.setPreservesAll();
-    MachineFunctionPass::getAnalysisUsage(AU);
-  }
+  Virt2PriorityMap.clear();
+  unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();
+  Virt2PriorityMap.resize(NumRegs);
 
-public:
-  bool runOnMachineFunction(MachineFunction &MF) override {
-    if (skipFunction(MF.getFunction()))
-      return false;
+  for (auto &MBB : MF) {
+    for (auto &MI : MBB) {
 
-    const auto &STI = MF.getSubtarget<RISCVSubtarget>();
+      auto CompressibleRegs = RISCVRVC::getCompressibleRegs(MI, STI);
 
-    Virt2PriorityMap.clear();
-    unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();
-    Virt2PriorityMap.resize(NumRegs);
+      if (CompressibleRegs.empty())
+        continue;
 
-    for (auto &MBB : MF) {
-      for (auto &MI : MBB) {
+      LLVM_DEBUG(MI.print(dbgs()));
+      LLVM_DEBUG(dbgs() << "this instruction can be compressed, and it has the "
+                           "following compressible registers: ");
+      for (const auto &Reg : CompressibleRegs) {
+        LLVM_DEBUG(dbgs() << printReg(Reg) << ", ");
+      }
+      LLVM_DEBUG(dbgs() << "\n");
 
-        auto CompressibleRegs = RISCVRVC::getCompressibleRegs(MI, STI);
-
-        if (CompressibleRegs.empty())
-          continue;
-
-        LLVM_DEBUG(MI.print(dbgs()));
-        LLVM_DEBUG(
-            dbgs() << "this instruction can be compressed, and it has the "
-                      "following compressible registers: ");
-        for (const auto &Reg : CompressibleRegs) {
-          LLVM_DEBUG(dbgs() << printReg(Reg) << ", ");
-        }
-        LLVM_DEBUG(dbgs() << "\n");
-
-        for (const auto &Reg : CompressibleRegs) {
-          assert(Reg.isVirtual() &&
-                 "I thought all registers you returned are virtual?");
-          Virt2PriorityMap[Reg]++;
-        }
+      for (const auto &Reg : CompressibleRegs) {
+        assert(Reg.isVirtual() &&
+               "I thought all registers you returned are virtual?");
+        Virt2PriorityMap[Reg]++;
       }
     }
-
-    // Print the priorities
-    for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {
-      auto Virt = Register::index2VirtReg(Idx); // Probably non-existent?
-      auto Priority = Virt2PriorityMap[Virt];
-
-      errs() << printReg(Virt) << ": " << Priority << "\n";
-    }
-
-    // MF.print(errs());
-
-    return false;
   }
-};
-} // end anonymous namespace
+
+  // Print the priorities
+  for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {
+    auto Virt = Register::index2VirtReg(Idx); // Probably non-existent?
+    auto Priority = Virt2PriorityMap[Virt];
+
+    errs() << printReg(Virt) << ": " << Priority << "\n";
+  }
+
+  // MF.print(errs());
+
+  return false;
+}
 
 char RISCVRegCompressionPriorities::ID = 0;
 

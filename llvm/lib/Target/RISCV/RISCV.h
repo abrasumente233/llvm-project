@@ -74,6 +74,9 @@ void initializeRISCVRedundantCopyEliminationPass(PassRegistry &);
 FunctionPass *createRISCVRegCompressionPrioritiesPass();
 void initializeRISCVRegCompressionPrioritiesPass(PassRegistry &);
 
+FunctionPass *createRISCVRegShufflerPass();
+void initializeRISCVRegShufflerPass(PassRegistry &);
+
 FunctionPass *createRISCVInitUndefPass();
 void initializeRISCVInitUndefPass(PassRegistry &);
 extern char &RISCVInitUndefID;
