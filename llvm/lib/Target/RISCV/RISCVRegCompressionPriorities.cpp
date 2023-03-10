@@ -52,8 +52,8 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
       LLVM_DEBUG(dbgs() << "\n");
 
       for (const auto &Reg : CompressibleRegs) {
-        assert(Reg.isVirtual() &&
-               "I thought all registers you returned are virtual?");
+        if (!Reg.isVirtual())
+          continue;
         Virt2PriorityMap[Reg]++;
       }
     }
