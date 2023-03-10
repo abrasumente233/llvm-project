@@ -232,33 +232,54 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
 
     // FIXME: Deal with more than one interfering vregs
     assert(BestInterferingVRegs.size() == 1);
-    const auto &ILI = *BestInterferingVRegs[0];
-    auto IReg = ILI.reg();
-    auto IPhysReg = RegMap.getPhys(IReg);
+    auto IPhysReg = RegMap.getPhys(BestInterferingVRegs[0]->reg());
 
     // Now we try to swap, if and only if the end result doesn't violate
     // interference rules.
-    // TODO: Continue swapping.
-    LLVM_DEBUG(dbgs() << "Preparing to swap, before = {" << printReg(Reg)
-                      << " -> " << printReg(PhysReg, TRI) << ", "
-                      << printReg(IReg) << " -> " << printReg(IPhysReg, TRI)
-                      << "}\n");
+
+    // Unassign all vregs involved
     Matrix->unassign(RegLI);
-    Matrix->unassign(ILI);
-    if (Matrix->checkInterference(RegLI, IPhysReg) == LiveRegMatrix::IK_Free &&
-        Matrix->checkInterference(ILI, PhysReg) == LiveRegMatrix::IK_Free) {
-      // Actually swap
-      Matrix->assign(RegLI, IPhysReg);
-      Matrix->assign(ILI, PhysReg);
-      LLVM_DEBUG(dbgs() << "Swapped, before = {" << printReg(Reg) << " -> "
-                        << printReg(PhysReg, TRI) << ", " << printReg(IReg)
-                        << " -> " << printReg(IPhysReg, TRI) << "}\n");
-    } else {
+    for (const auto *ILI : BestInterferingVRegs) {
+      Matrix->unassign(*ILI);
+    }
+
+    // Check if interference is violated
+    bool NoViolation = true;
+    NoViolation &=
+        Matrix->checkInterference(RegLI, IPhysReg) == LiveRegMatrix::IK_Free;
+    if (NoViolation) {
+      for (const auto *ILI : BestInterferingVRegs) {
+        if (Matrix->checkInterference(*ILI, PhysReg) !=
+            LiveRegMatrix::IK_Free) {
+          NoViolation = false;
+          break;
+        }
+      }
+    }
+
+    if (!NoViolation) {
+      errs() << "Swapping violates interference, bailing out\n";
+
+      // Reassign all vregs involved
       Matrix->assign(RegLI, PhysReg);
-      Matrix->assign(ILI, IPhysReg);
-      LLVM_DEBUG(dbgs() << "Fail to swap, before = {" << printReg(Reg) << " -> "
-                        << printReg(PhysReg, TRI) << ", " << printReg(IReg)
-                        << " -> " << printReg(IPhysReg, TRI) << "}\n");
+      for (const auto *ILI : BestInterferingVRegs) {
+        Matrix->assign(*ILI, IPhysReg);
+      }
+
+      continue;
+    }
+
+    // TODO: Continue swapping.
+    LLVM_DEBUG(dbgs() << "Swapping, before = { " << printReg(Reg) << " -> "
+                      << printReg(PhysReg, TRI) << " ");
+    for (const auto *ILI : BestInterferingVRegs) {
+      LLVM_DEBUG(dbgs() << printReg(ILI->reg()) << " -> "
+                        << printReg(IPhysReg, TRI) << " ");
+    }
+
+    Matrix->assign(RegLI, IPhysReg);
+    for (const auto *ILI : BestInterferingVRegs) {
+      Matrix->assign(*ILI, PhysReg);
     }
   }
 
