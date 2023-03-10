@@ -257,7 +257,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     }
 
     if (!NoViolation) {
-      errs() << "Swapping violates interference, bailing out\n";
+      LLVM_DEBUG(dbgs() << "Swapping violates interference, bailing out\n");
 
       // Reassign all vregs involved
       Matrix->assign(RegLI, PhysReg);
