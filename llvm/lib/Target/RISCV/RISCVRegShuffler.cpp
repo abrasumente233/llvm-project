@@ -231,7 +231,6 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
       continue;
 
     // FIXME: Deal with more than one interfering vregs
-    assert(BestInterferingVRegs.size() == 1);
     auto IPhysReg = RegMap.getPhys(BestInterferingVRegs[0]->reg());
 
     // Now we try to swap, if and only if the end result doesn't violate
