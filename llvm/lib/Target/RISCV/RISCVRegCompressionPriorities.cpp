@@ -23,6 +23,13 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-reg-compression-priorities"
 
+unsigned satSub(unsigned X, unsigned Y) {
+  unsigned Res = X - Y;
+  Res &= -(Res <= X);
+
+  return Res;
+}
+
 bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
     MachineFunction &MF) {
 
@@ -75,9 +82,7 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
         assert(Dst == Reg || Src == Reg);
 
         const unsigned Decrease = 2;
-        if (Virt2PriorityMap[Reg] >= Decrease) {
-          Virt2PriorityMap[Reg] -= Decrease;
-        }
+        Virt2PriorityMap[Reg] = satSub(Virt2PriorityMap[Reg], Decrease);
       }
     }
   }
