@@ -23,13 +23,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-reg-compression-priorities"
 
-unsigned satAdd(unsigned X, unsigned Y) {
-  unsigned Res = X + Y;
-  Res |= -(Res < X);
-
-  return Res;
-}
-
 bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
     MachineFunction &MF) {
 
@@ -85,8 +78,7 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
         const auto &Reg = Dst.isVirtual() ? Dst : Src;
         assert(Dst == Reg || Src == Reg);
 
-        const unsigned Increased = 1;
-        Virt2PriorityMap[Reg] = satAdd(Virt2PriorityMap[Reg], Increased);
+        Virt2PriorityMap[Reg] += 1;
 
         LLVM_DEBUG(dbgs() << "increased priority for " << printReg(Reg)
                           << ", now " << Virt2PriorityMap[Reg] << "\n");
