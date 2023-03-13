@@ -56,6 +56,29 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
           continue;
         Virt2PriorityMap[Reg]++;
       }
+
+      // For virt->phys or phys->virt moves, if virt is a compressible register,
+      // we will decrease its compression priority since allocating a different
+      // physreg to it will cause failure of removing this move instruction,
+      // wasting two bytes.
+      if (!MI.isCopy())
+        continue;
+
+      Register Dst = MI.getOperand(0).getReg();
+      Register Src = MI.getOperand(1).getReg();
+
+      if ((Dst.isVirtual() && Src.isPhysical()) ||
+          (Dst.isPhysical() && Src.isVirtual())) {
+        // Decrease the priority
+        assert(CompressibleRegs.size() == 1);
+        const auto &Reg = CompressibleRegs[0];
+        assert(Dst == Reg || Src == Reg);
+
+        const unsigned Decrease = 2;
+        if (Virt2PriorityMap[Reg] >= Decrease) {
+          Virt2PriorityMap[Reg] -= Decrease;
+        }
+      }
     }
   }
 
