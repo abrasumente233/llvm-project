@@ -23,9 +23,9 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-reg-compression-priorities"
 
-unsigned satSub(unsigned X, unsigned Y) {
-  unsigned Res = X - Y;
-  Res &= -(Res <= X);
+unsigned satAdd(unsigned X, unsigned Y) {
+  unsigned Res = X + Y;
+  Res |= -(Res < X);
 
   return Res;
 }
@@ -63,11 +63,15 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
           continue;
         Virt2PriorityMap[Reg]++;
       }
+    }
+  }
 
-      // For virt->phys or phys->virt moves, if virt is a compressible register,
-      // we will decrease its compression priority since allocating a different
-      // physreg to it will cause failure of removing this move instruction,
-      // wasting two bytes.
+  // For virt->phys or phys->virt moves, if virt is a compressible register,
+  // we will increase its compression priority since allocating a different
+  // physreg to it will cause failure of removing this move instruction,
+  // wasting two bytes.
+  for (auto &MBB : MF) {
+    for (auto &MI : MBB) {
       if (!MI.isCopy())
         continue;
 
@@ -76,16 +80,21 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
 
       if ((Dst.isVirtual() && Src.isPhysical()) ||
           (Dst.isPhysical() && Src.isVirtual())) {
-        // Decrease the priority
-        assert(CompressibleRegs.size() == 1);
-        const auto &Reg = CompressibleRegs[0];
+        // Increase the priority
+
+        const auto &Reg = Dst.isVirtual() ? Dst : Src;
         assert(Dst == Reg || Src == Reg);
 
-        const unsigned Decrease = 2;
-        Virt2PriorityMap[Reg] = satSub(Virt2PriorityMap[Reg], Decrease);
+        const unsigned Increased = 1;
+        Virt2PriorityMap[Reg] = satAdd(Virt2PriorityMap[Reg], Increased);
+
+        LLVM_DEBUG(dbgs() << "increased priority for " << printReg(Reg)
+                          << ", now " << Virt2PriorityMap[Reg] << "\n");
       }
     }
   }
+
+  LLVM_DEBUG(MF.print(dbgs()));
 
   // Print the priorities
   //  for (unsigned Idx = 0, E = Virt2PriorityMap.size(); Idx < E; Idx++) {
