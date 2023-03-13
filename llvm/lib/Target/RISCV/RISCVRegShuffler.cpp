@@ -197,7 +197,14 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     SmallVector<const LiveInterval *, 4> BestInterferingVRegs;
     unsigned MinPriority = std::numeric_limits<unsigned>::max();
 
-    for (auto PopularPhysReg : getCompressibleRegs()) {
+    for (TargetRegisterClass::iterator RegClassPhys = RegClass->begin();
+         RegClassPhys < RegClass->end(); RegClassPhys++) {
+
+      if (!isCompressibleReg(*RegClassPhys))
+        continue;
+
+      const auto &PopularPhysReg = *RegClassPhys;
+
       SmallVector<const LiveInterval *, 4> InterferingVRegs;
       unsigned TotalPriority = 0;
 
@@ -207,7 +214,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
         ArrayRef<const LiveInterval *> IVR = Q.interferingVRegs();
         for (const auto *I : IVR) {
           auto IReg = I->reg();
-          auto IPriority = PriorityMap[I->reg()];
+          auto IPriority = PriorityMap[IReg];
 
           TotalPriority += IPriority;
           if (TotalPriority >= Priority) {
