@@ -155,7 +155,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     // If this VReg is already allocated to a popular physical
     // register, we're happy.
     if (isCompressibleReg(PhysReg)) {
-      LLVM_DEBUG(dbgs() << printReg(Reg) << " already has popular reg "
+      LLVM_DEBUG(dbgs() << "  " << printReg(Reg) << " already has popular reg "
                         << printReg(PhysReg, TRI) << "\n");
       continue;
     }
@@ -173,7 +173,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
       if (!isCompressibleReg(*RegClassPhys))
         continue;
 
-      LLVM_DEBUG(dbgs() << "Found a popular register "
+      LLVM_DEBUG(dbgs() << "  Found a popular register "
                         << printReg(*RegClassPhys, TRI)
                         << ", checking interference\n");
 
@@ -181,13 +181,18 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
           LiveRegMatrix::IK_Free) {
         Matrix->unassign(RegLI);
         Matrix->assign(RegLI, *RegClassPhys);
-        LLVM_DEBUG(dbgs() << "interference check passed, swapped ok.\n";
+        LLVM_DEBUG(dbgs() << "  interference check passed, swapped ok.\n";
                    Swapped = true);
       }
     }
 
     if (Swapped)
       continue;
+
+    LLVM_DEBUG(
+        dbgs()
+        << "  No free popular regs found, finding an suitable interfering "
+           "vreg to swap\n");
 
     // If no free popular registers, find an interfering VReg that
     //   1) occupies a popular register,
@@ -237,17 +242,27 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     if (BestInterferingVRegs.size() == 0)
       continue;
 
+    LLVM_DEBUG(dbgs() << "  BestInterferingVRegs = ");
+    for (const auto *ILI : BestInterferingVRegs) {
+      LLVM_DEBUG(dbgs() << printReg(ILI->reg()) << " ");
+    }
+    LLVM_DEBUG(dbgs() << "\n");
+
     // FIXME: Deal with more than one interfering vregs
     auto IPhysReg = RegMap.getPhys(BestInterferingVRegs[0]->reg());
+    LLVM_DEBUG(dbgs() << "  IPhysReg = " << printReg(IPhysReg, TRI) << "\n");
 
     // Now we try to swap, if and only if the end result doesn't violate
     // interference rules.
 
     // Unassign all vregs involved
+    LLVM_DEBUG(dbgs() << "  unassigning RegLI " << printReg(RegLI.reg()) << "\n");
     Matrix->unassign(RegLI);
     for (const auto *ILI : BestInterferingVRegs) {
+      LLVM_DEBUG(dbgs() << "  unassigning " << printReg(ILI->reg()) << "\n");
       Matrix->unassign(*ILI);
     }
+    LLVM_DEBUG(dbgs() << "  unasisign done\n");
 
     // Check if interference is violated
     bool NoViolation = true;
@@ -264,7 +279,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     }
 
     if (!NoViolation) {
-      LLVM_DEBUG(dbgs() << "Swapping violates interference, bailing out\n");
+      LLVM_DEBUG(dbgs() << "  Swapping violates interference, bailing out\n");
 
       // Reassign all vregs involved
       Matrix->assign(RegLI, PhysReg);
@@ -276,7 +291,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     }
 
     // TODO: Continue swapping.
-    LLVM_DEBUG(dbgs() << "Swapping, before = { " << printReg(Reg) << " -> "
+    LLVM_DEBUG(dbgs() << "  Swapping, before = { " << printReg(Reg) << " -> "
                       << printReg(PhysReg, TRI) << " ");
     for (const auto *ILI : BestInterferingVRegs) {
       LLVM_DEBUG(dbgs() << printReg(ILI->reg()) << " -> "
