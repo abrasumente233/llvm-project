@@ -143,6 +143,8 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
   //    "\n";
   //  }
 
+  const unsigned CalleeRegUseCost = 2;
+
   // Iterate over `Queue` to perform register shuffling
   // FIXME: Skip VRegs that have Priority 0
   while (!Queue.empty()) {
@@ -184,7 +186,7 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
       // So we're aiming for the worst case, and make sure the
       // priority, which is approximately (bytes_save / 2),
       // is greater than 2.
-      if (isCalleeSave(*RegClassPhys) && Priority <= 2) {
+      if (isCalleeSave(*RegClassPhys) && Priority <= CalleeRegUseCost) {
         continue;
       }
 
@@ -242,7 +244,9 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
           auto IPriority = PriorityMap[IReg];
 
           TotalPriority += IPriority;
-          if (TotalPriority >= Priority) {
+          if ((!isCalleeSave(PopularPhysReg) && TotalPriority >= Priority) ||
+              (isCalleeSave(PopularPhysReg) &&
+               TotalPriority + CalleeRegUseCost >= Priority)) {
             // Skip this PhysReg
             goto SkipThisPhys;
           }
