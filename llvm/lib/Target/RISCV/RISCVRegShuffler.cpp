@@ -75,8 +75,8 @@ void RISCVRegShuffler::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 SmallVector<MCRegister, 8> getCompressibleRegs() {
-  return {RISCV::X10, RISCV::X11, RISCV::X12,
-          RISCV::X13, RISCV::X14, RISCV::X15};
+  return {RISCV::X10, RISCV::X11, RISCV::X12, RISCV::X13,
+          RISCV::X14, RISCV::X15, RISCV::X8,  RISCV::X9};
 }
 
 bool RISCVRegShuffler::isCompressibleReg(MCRegister PhysReg) {
@@ -88,10 +88,15 @@ bool RISCVRegShuffler::isCompressibleReg(MCRegister PhysReg) {
   //         PhysReg == RISCV::X14 || PhysReg == RISCV::X15;
   return PhysReg == RISCV::X10 || PhysReg == RISCV::X11 ||
          PhysReg == RISCV::X12 || PhysReg == RISCV::X13 ||
-         PhysReg == RISCV::X14 || PhysReg == RISCV::X15;
+         PhysReg == RISCV::X14 || PhysReg == RISCV::X15 ||
+         PhysReg == RISCV::X8 || PhysReg == RISCV::X9;
 
   ;
   // return RegCosts[PhysReg] == 0;
+}
+
+bool isCalleeSave(MCRegister PhysReg) {
+  return PhysReg == RISCV::X8 || PhysReg == RISCV::X9;
 }
 
 bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
@@ -173,6 +178,16 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
       if (!isCompressibleReg(*RegClassPhys))
         continue;
 
+      // When using callee save registers such as x8 and x9,
+      // in the worst case we will have to introduce two extra
+      // save and restore, costing us another 4 bytes.
+      // So we're aiming for the worst case, and make sure the
+      // priority, which is approximately (bytes_save / 2),
+      // is greater than 2.
+      if (isCalleeSave(*RegClassPhys) && Priority <= 2) {
+        continue;
+      }
+
       LLVM_DEBUG(dbgs() << "  Found a popular register "
                         << printReg(*RegClassPhys, TRI)
                         << ", checking interference\n");
@@ -207,6 +222,11 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
 
       if (!isCompressibleReg(*RegClassPhys))
         continue;
+
+      // TODO: Make use of x8 and x9
+      if (isCalleeSave(*RegClassPhys)) {
+        continue;
+      }
 
       const auto &PopularPhysReg = *RegClassPhys;
 
@@ -256,7 +276,8 @@ bool RISCVRegShuffler::runOnMachineFunction(MachineFunction &MF) {
     // interference rules.
 
     // Unassign all vregs involved
-    LLVM_DEBUG(dbgs() << "  unassigning RegLI " << printReg(RegLI.reg()) << "\n");
+    LLVM_DEBUG(dbgs() << "  unassigning RegLI " << printReg(RegLI.reg())
+                      << "\n");
     Matrix->unassign(RegLI);
     for (const auto *ILI : BestInterferingVRegs) {
       LLVM_DEBUG(dbgs() << "  unassigning " << printReg(ILI->reg()) << "\n");
