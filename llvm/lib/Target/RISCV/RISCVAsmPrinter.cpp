@@ -43,6 +43,8 @@ using namespace llvm;
 
 STATISTIC(RISCVNumInstrsCompressed,
           "Number of RISC-V Compressed instructions emitted");
+STATISTIC(RISCVNumTriesCompressInstrs,
+          "Number of tries to compress RISC-V instructions");
 
 namespace {
 class RISCVAsmPrinter : public AsmPrinter {
@@ -86,11 +88,13 @@ public:
 private:
   void emitAttributes();
 };
-}
+} // namespace
 
 void RISCVAsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst) {
   MCInst CInst;
   bool Res = RISCVRVC::compress(CInst, Inst, *STI);
+  errs() << Inst << "\n";
+  ++RISCVNumTriesCompressInstrs;
   if (Res)
     ++RISCVNumInstrsCompressed;
   AsmPrinter::EmitToStreamer(*OutStreamer, Res ? CInst : Inst);
@@ -107,7 +111,6 @@ void RISCVAsmPrinter::emitInstruction(const MachineInstr *MI) {
   // Do any auto-generated pseudo lowerings.
   if (emitPseudoExpansionLowering(*OutStreamer, MI))
     return;
-
 
   switch (MI->getOpcode()) {
   case RISCV::HWASAN_CHECK_MEMACCESS_SHORTGRANULES:
@@ -197,6 +200,9 @@ bool RISCVAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 
   SetupMachineFunction(MF);
   emitFunctionBody();
+
+  errs() << "RISCVNumTriesCompressInstrs: " << RISCVNumTriesCompressInstrs
+         << ", RISCVNumInstrsCompressed: " << RISCVNumInstrsCompressed << "\n";
   return false;
 }
 
@@ -454,11 +460,9 @@ void RISCVAsmPrinter::EmitHwasanMemaccessSymbols(Module &M) {
                                                                             8),
         MCSTI);
     if (Reg != RISCV::X10)
-      OutStreamer->emitInstruction(MCInstBuilder(RISCV::ADDI)
-                                       .addReg(RISCV::X10)
-                                       .addReg(Reg)
-                                       .addImm(0),
-                                   MCSTI);
+      OutStreamer->emitInstruction(
+          MCInstBuilder(RISCV::ADDI).addReg(RISCV::X10).addReg(Reg).addImm(0),
+          MCSTI);
     OutStreamer->emitInstruction(
         MCInstBuilder(RISCV::ADDI)
             .addReg(RISCV::X11)
@@ -470,3 +474,4 @@ void RISCVAsmPrinter::EmitHwasanMemaccessSymbols(Module &M) {
                                  MCSTI);
   }
 }
+
