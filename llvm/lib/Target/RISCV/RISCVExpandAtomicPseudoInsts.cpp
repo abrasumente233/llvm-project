@@ -86,6 +86,31 @@ bool RISCVExpandAtomicPseudo::runOnMachineFunction(MachineFunction &MF) {
   const unsigned NewSize = getInstSizeInBytes(MF);
   assert(OldSize >= NewSize);
 #endif
+
+  // Tally up the number of compressible instructions
+  auto &STI = MF.getSubtarget<RISCVSubtarget>();
+  unsigned TotalInstrs = 0;
+  unsigned CompressibleInstrs = 0;
+  for (auto &MBB : MF) {
+    for (auto &MI : MBB) {
+      if (MI.isDebugInstr() || MI.isCFIInstruction())
+        continue;
+      auto CompressibleRegs = RISCVRVC::getCompressibleRegs(MI, STI);
+
+      TotalInstrs++;
+      if (!CompressibleRegs.empty()) {
+        CompressibleInstrs++;
+        errs() << "ok ";
+
+      }
+
+      errs() << MI;
+    }
+  }
+
+  errs() << "TotalInstrs: " << TotalInstrs
+         << ", CompressibleInstrs: " << CompressibleInstrs << "\n";
+
   return Modified;
 }
 
@@ -105,8 +130,8 @@ bool RISCVExpandAtomicPseudo::expandMBB(MachineBasicBlock &MBB) {
 bool RISCVExpandAtomicPseudo::expandMI(MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MBBI,
                                        MachineBasicBlock::iterator &NextMBBI) {
-  // RISCVInstrInfo::getInstSizeInBytes expects that the total size of the       
-  // expanded instructions for each pseudo is correct in the Size field of the   
+  // RISCVInstrInfo::getInstSizeInBytes expects that the total size of the
+  // expanded instructions for each pseudo is correct in the Size field of the
   // tablegen definition for the pseudo.
   switch (MBBI->getOpcode()) {
   case RISCV::PseudoAtomicLoadNand32:
