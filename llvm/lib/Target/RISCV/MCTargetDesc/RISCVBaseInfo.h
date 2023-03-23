@@ -468,6 +468,7 @@ class RISCVSubtarget;
 namespace RISCVRVC {
 bool compress(MCInst &OutInst, const MCInst &MI, const MCSubtargetInfo &STI);
 bool uncompress(MCInst &OutInst, const MCInst &MI, const MCSubtargetInfo &STI);
+bool isInstCompressibleViaReg(const MCInst &MI, const MCSubtargetInfo &STI);
 SmallVector<Register, 4> getCompressibleRegs(const MachineInstr &MI,
                                              const RISCVSubtarget &STI);
 } // namespace RISCVRVC
