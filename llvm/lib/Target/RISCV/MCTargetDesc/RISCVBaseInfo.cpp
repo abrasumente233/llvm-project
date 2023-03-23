@@ -203,6 +203,7 @@ unsigned RISCVVType::getSEWLMULRatio(unsigned SEW, RISCVII::VLMUL VLMul) {
 #define GEN_UNCOMPRESS_INSTR
 #define GEN_COMPRESS_INSTR
 #define GEN_GET_COMPRESSIBLE_REGS
+#define GEN_IS_COMPRESSIBLE_VIA_REG
 #include "RISCVGenCompressInstEmitter.inc"
 
 bool RISCVRVC::compress(MCInst &OutInst, const MCInst &MI,
@@ -213,6 +214,11 @@ bool RISCVRVC::compress(MCInst &OutInst, const MCInst &MI,
 bool RISCVRVC::uncompress(MCInst &OutInst, const MCInst &MI,
                           const MCSubtargetInfo &STI) {
   return uncompressInst(OutInst, MI, STI);
+}
+
+bool RISCVRVC::isInstCompressibleViaReg(const MCInst &MI,
+                                    const MCSubtargetInfo &STI) {
+  return isCompressibleViaReg(MI, STI);
 }
 
 SmallVector<Register, 4>

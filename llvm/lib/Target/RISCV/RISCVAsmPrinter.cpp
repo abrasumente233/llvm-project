@@ -43,8 +43,12 @@ using namespace llvm;
 
 STATISTIC(RISCVNumInstrsCompressed,
           "Number of RISC-V Compressed instructions emitted");
-STATISTIC(RISCVNumTriesCompressInstrs,
-          "Number of tries to compress RISC-V instructions");
+STATISTIC(RISCVNumTriesCompressInstrsViaReg,
+          "Number of tries to compress RISC-V instructions via short encoding "
+          "of register");
+STATISTIC(RISCVNumInstrsCompressibleViaReg,
+          "Number of RISC-V instructions compressible via short encoding of "
+          "register");
 
 namespace {
 class RISCVAsmPrinter : public AsmPrinter {
@@ -92,9 +96,13 @@ private:
 
 void RISCVAsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst) {
   MCInst CInst;
+  bool IsCompressibleViaReg = RISCVRVC::isInstCompressibleViaReg(Inst, *STI);
   bool Res = RISCVRVC::compress(CInst, Inst, *STI);
-  errs() << Inst << "\n";
-  ++RISCVNumTriesCompressInstrs;
+  if (IsCompressibleViaReg) {
+    ++RISCVNumTriesCompressInstrsViaReg;
+    if (Res)
+      ++RISCVNumInstrsCompressibleViaReg;
+  }
   if (Res)
     ++RISCVNumInstrsCompressed;
   AsmPrinter::EmitToStreamer(*OutStreamer, Res ? CInst : Inst);
@@ -201,8 +209,11 @@ bool RISCVAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   SetupMachineFunction(MF);
   emitFunctionBody();
 
-  errs() << "RISCVNumTriesCompressInstrs: " << RISCVNumTriesCompressInstrs
-         << ", RISCVNumInstrsCompressed: " << RISCVNumInstrsCompressed << "\n";
+  errs() << "RISCVNumTriesCompressInstrsViaReg: "
+         << RISCVNumTriesCompressInstrsViaReg
+         << ", RISCVNumInstrsCompressibleViaReg: "
+         << RISCVNumInstrsCompressibleViaReg << "\n";
+
   return false;
 }
 
@@ -474,4 +485,3 @@ void RISCVAsmPrinter::EmitHwasanMemaccessSymbols(Module &M) {
                                  MCSTI);
   }
 }
-
