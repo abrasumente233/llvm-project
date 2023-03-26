@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
 // This file implements a function pass that initializes undef vector value to
 // temporary pseudo instruction and remove it in expandpseudo pass to prevent
 // register allocation resulting in a constraint violated result for vector
@@ -255,12 +254,34 @@ bool RISCVInitUndef::processBasicBlock(MachineFunction &MF,
 
 bool RISCVInitUndef::runOnMachineFunction(MachineFunction &MF) {
   ST = &MF.getSubtarget<RISCVSubtarget>();
-  if (!ST->hasVInstructions())
-    return false;
 
   MRI = &MF.getRegInfo();
   TII = ST->getInstrInfo();
   TRI = MRI->getTargetRegisterInfo();
+  const auto *RBI = ST->getRegBankInfo();
+
+  errs() << "hello\n";
+  // Iterate over all instructions
+  for (MachineBasicBlock &MBB : MF)
+    for (MachineInstr &MI : MBB) {
+      // If MI is an XOR
+      if (MI.getOpcode() != RISCV::XOR && MI.getOpcode() != RISCV::OR)
+        continue;
+
+      errs() << "tying" << MI;
+      auto RegClass = TRI->getRegClass(RISCV::GPRCRegClassID);
+      constrainOperandRegClass(MF, *TRI, *MRI, *TII, *RBI, MI, *RegClass,
+                               MI.getOperand(0));
+      constrainOperandRegClass(MF, *TRI, *MRI, *TII, *RBI, MI, *RegClass,
+                               MI.getOperand(1));
+      constrainOperandRegClass(MF, *TRI, *MRI, *TII, *RBI, MI, *RegClass,
+                               MI.getOperand(2));
+      // RISCVMCRegisterClasses
+      MI.tieOperands(0, 1);
+    }
+
+  if (!ST->hasVInstructions())
+    return false;
 
   bool Changed = false;
   DeadLaneDetector DLD(MRI, TRI);
