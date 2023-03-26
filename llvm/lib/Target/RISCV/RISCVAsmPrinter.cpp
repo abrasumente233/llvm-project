@@ -53,6 +53,7 @@ STATISTIC(RISCVNumInstrsCompressibleViaReg,
 namespace {
 class RISCVAsmPrinter : public AsmPrinter {
   const RISCVSubtarget *STI;
+  RISCVInstPrinter *IP;
 
 public:
   explicit RISCVAsmPrinter(TargetMachine &TM,
@@ -102,6 +103,11 @@ void RISCVAsmPrinter::EmitToStreamer(MCStreamer &S, const MCInst &Inst) {
     ++RISCVNumTriesCompressInstrsViaReg;
     if (Res)
       ++RISCVNumInstrsCompressibleViaReg;
+    else {
+      errs() << "missed ";
+      IP->printInst(&Inst, 0, "", *STI, errs());
+      errs() << "\n";
+    }
   }
   if (Res)
     ++RISCVNumInstrsCompressed;
@@ -205,6 +211,11 @@ bool RISCVAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI,
 
 bool RISCVAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   STI = &MF.getSubtarget<RISCVSubtarget>();
+
+  const auto* MAI = MF.getTarget().getMCAsmInfo();
+  const auto* MII = STI->getInstrInfo();
+  const auto* MRI = STI->getRegisterInfo();
+  IP = new RISCVInstPrinter(*MAI, *MII, *MRI);
 
   SetupMachineFunction(MF);
   emitFunctionBody();
