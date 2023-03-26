@@ -30,6 +30,7 @@ bool llvm::RISCVRegCompressionPriorities::runOnMachineFunction(
     return false;
 
   const auto &STI = MF.getSubtarget<RISCVSubtarget>();
+  const auto *TII = STI.getInstrInfo();
 
   Virt2PriorityMap.clear();
   unsigned NumRegs = MF.getRegInfo().getNumVirtRegs();

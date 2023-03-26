@@ -71,6 +71,9 @@ void initializeRISCVInsertVSETVLIPass(PassRegistry &);
 FunctionPass *createRISCVRedundantCopyEliminationPass();
 void initializeRISCVRedundantCopyEliminationPass(PassRegistry &);
 
+FunctionPass *createRISCVTieRegPass();
+void initializeRISCVTieRegPass(PassRegistry &);
+
 FunctionPass *createRISCVRegCompressionPrioritiesPass();
 void initializeRISCVRegCompressionPrioritiesPass(PassRegistry &);
 
