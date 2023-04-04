@@ -634,7 +634,6 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     o << "\n#ifdef GEN_IS_COMPRESSIBLE_VIA_REG\n"
       << "#undef GEN_IS_COMPRESSIBLE_VIA_REG\n\n";
 
-
   if (EType == EmitterType::Compress) {
     FuncH << "static bool compressInst(MCInst &OutInst,\n";
     FuncH.indent(25) << "const MCInst &MI,\n";
@@ -853,8 +852,11 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
           // Don't check register class if this is a tied operand, it was done
           // for the operand its tied to.
           if (DestOperand.getTiedRegister() == -1) {
-            if (EType != EmitterType::GetCompressibleRegs &&
-                EType != EmitterType::IsCompressibleViaReg) {
+            if ((EType != EmitterType::GetCompressibleRegs &&
+                 EType != EmitterType::IsCompressibleViaReg) ||
+                ((EType == EmitterType::GetCompressibleRegs ||
+                  EType == EmitterType::IsCompressibleViaReg) &&
+                 ClassRec->getName() != "GPRC")) {
               CondStream.indent(6)
                   << "(MI.getOperand(" << OpIdx << ").isReg()) &&\n"
                   << "      (" << TargetName << "MCRegisterClasses["
@@ -873,7 +875,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                 << "OutInst.addOperand(MI.getOperand(" << OpIdx << "));\n";
         } else {
           // Handling immediate operands.
-          if (CompressOrUncompress || EType == EmitterType::IsCompressibleViaReg) {
+          if (CompressOrUncompress ||
+              EType == EmitterType::IsCompressibleViaReg) {
             unsigned Entry =
                 getPredicates(MCOpPredicateMap, MCOpPredicates, DestOperand.Rec,
                               "MCOperandPredicate");
@@ -897,7 +900,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
         break;
       }
       case OpData::Imm: {
-        if (CompressOrUncompress || EType == EmitterType::IsCompressibleViaReg) {
+        if (CompressOrUncompress ||
+            EType == EmitterType::IsCompressibleViaReg) {
           unsigned Entry = getPredicates(MCOpPredicateMap, MCOpPredicates,
                                          DestOperand.Rec, "MCOperandPredicate");
           CondStream.indent(6)
