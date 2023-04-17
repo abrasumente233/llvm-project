@@ -149,6 +149,8 @@ class TargetInstrInfo;
     /// register that hasn't been assigned yet.
     bool hasKnownPreference(Register VirtReg) const;
 
+    Register getSimpleHintAndTranslateVirtToPhys(Register VirtReg) const;
+
     /// records virtReg is a split live interval from SReg.
     void setIsSplitFromReg(Register virtReg, Register SReg) {
       Virt2SplitMap[virtReg.id()] = SReg;

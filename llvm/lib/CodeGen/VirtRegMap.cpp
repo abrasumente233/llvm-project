@@ -124,6 +124,16 @@ bool VirtRegMap::hasKnownPreference(Register VirtReg) const {
   return false;
 }
 
+Register VirtRegMap::getSimpleHintAndTranslateVirtToPhys(Register VirtReg) const {
+  Register Hint = MRI->getSimpleHint(VirtReg);
+  if (Hint.isVirtual()) {
+    if (!hasPhys(Hint))
+      return Register();
+    Hint = getPhys(Hint);
+  }
+  return Hint;
+}
+
 int VirtRegMap::assignVirt2StackSlot(Register virtReg) {
   assert(virtReg.isVirtual());
   assert(Virt2StackSlotMap[virtReg.id()] == NO_STACK_SLOT &&

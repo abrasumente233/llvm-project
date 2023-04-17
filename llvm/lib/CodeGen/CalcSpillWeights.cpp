@@ -258,7 +258,9 @@ float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
     }
 
     // Get allocation hints from copies.
-    if (!MI->isCopy())
+    // Copy or XOR
+    //if (!MI->isCopy())
+    if (!MI->isCopy() && MI->getOpcode() != 13187 && MI->getOpcode() != 12443)
       continue;
     Register HintReg = copyHint(MI, LI.reg(), TRI, MRI);
     if (!HintReg)
