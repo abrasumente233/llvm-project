@@ -282,7 +282,7 @@ static std::unique_ptr<MachineFunction> cloneMF(MachineFunction *SrcMF,
 
     // Copy register allocation hints.
     const auto &Hints = SrcMRI->getRegAllocationHints(Reg);
-    for (Register PrefReg : Hints.second)
+    for (auto [_, PrefReg] : Hints.second)
       DstMRI->addRegAllocationHint(NewReg, PrefReg);
   }
 
