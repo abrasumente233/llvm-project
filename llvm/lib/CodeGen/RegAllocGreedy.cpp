@@ -424,7 +424,7 @@ MCRegister RAGreedy::tryAssign(const LiveInterval &VirtReg,
   // If we missed a simple hint, try to cheaply evict interference from the
   // preferred register.
   //if (Register Hint = MRI->getSimpleHint(VirtReg.reg()))
-  if (Register Hint = VRM->getSimpleHintAndTranslateVirtToPhys(VirtReg.reg()))
+  if (Register Hint = VRM->getSimpleHintOrRs1EqRdHint(VirtReg.reg(), RegCosts))
     if (Order.isHint(Hint)) {
       MCRegister PhysHint = Hint.asMCReg();
       LLVM_DEBUG(dbgs() << "missed hint " << printReg(PhysHint, TRI) << '\n');

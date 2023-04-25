@@ -800,9 +800,9 @@ public:
 
   /// addRegAllocationHint - Add a register allocation hint to the hints
   /// vector for VReg.
-  void addRegAllocationHint(Register VReg, Register PrefReg) {
+  void addRegAllocationHint(Register VReg, Register PrefReg, HintType hintType = HintType::Normal) {
     assert(VReg.isVirtual());
-    RegAllocHints[VReg].second.push_back(std::make_pair(HintType::Normal, PrefReg));
+    RegAllocHints[VReg].second.push_back(std::make_pair(hintType, PrefReg));
   }
 
   /// Specify the preferred (target independent) register allocation hint for

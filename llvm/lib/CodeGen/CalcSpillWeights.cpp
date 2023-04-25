@@ -130,11 +130,11 @@ bool VirtRegAuxInfo::isRematerializable(const LiveInterval &LI,
 bool VirtRegAuxInfo::isLiveAtStatepointVarArg(LiveInterval &LI) {
   return any_of(VRM.getRegInfo().reg_operands(LI.reg()),
                 [](MachineOperand &MO) {
-    MachineInstr *MI = MO.getParent();
-    if (MI->getOpcode() != TargetOpcode::STATEPOINT)
-      return false;
-    return StatepointOpers(MI).getVarIdx() <= MO.getOperandNo();
-  });
+                  MachineInstr *MI = MO.getParent();
+                  if (MI->getOpcode() != TargetOpcode::STATEPOINT)
+                    return false;
+                  return StatepointOpers(MI).getVarIdx() <= MO.getOperandNo();
+                });
 }
 
 void VirtRegAuxInfo::calculateSpillWeightAndHint(LiveInterval &LI) {
@@ -198,7 +198,9 @@ float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
   struct CopyHint {
     const Register Reg;
     const float Weight;
-    CopyHint(Register R, float W) : Reg(R), Weight(W) {}
+    HintType hintType;
+    CopyHint(Register R, float W, HintType hintType = HintType::Normal)
+        : Reg(R), Weight(W), hintType(hintType) {}
     bool operator<(const CopyHint &Rhs) const {
       // Always prefer any physreg hint.
       if (Reg.isPhysical() != Rhs.Reg.isPhysical())
@@ -259,9 +261,13 @@ float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
 
     // Get allocation hints from copies.
     // Copy or XOR
-    //if (!MI->isCopy())
+    // if (!MI->isCopy())
     if (!MI->isCopy() && MI->getOpcode() != 13187 && MI->getOpcode() != 12443)
       continue;
+
+    bool isRs1EqRdHint = !MI->isCopy();
+    HintType hintType = isRs1EqRdHint ? HintType::RS1_EQ_RD : HintType::Normal;
+
     Register HintReg = copyHint(MI, LI.reg(), TRI, MRI);
     if (!HintReg)
       continue;
@@ -271,7 +277,7 @@ float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
     // FIXME: we probably shouldn't use floats at all.
     volatile float HWeight = Hint[HintReg] += Weight;
     if (HintReg.isVirtual() || MRI.isAllocatable(HintReg))
-      CopyHints.insert(CopyHint(HintReg, HWeight));
+      CopyHints.insert(CopyHint(HintReg, HWeight, hintType));
   }
 
   // Pass all the sorted copy hints to mri.
@@ -286,7 +292,7 @@ float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
           (TargetHint.first != 0 && Hint.Reg == TargetHint.second))
         // Don't add the same reg twice or the target-type hint again.
         continue;
-      MRI.addRegAllocationHint(LI.reg(), Hint.Reg);
+      MRI.addRegAllocationHint(LI.reg(), Hint.Reg, Hint.hintType);
     }
 
     // Weakly boost the spill weight of hinted registers.
