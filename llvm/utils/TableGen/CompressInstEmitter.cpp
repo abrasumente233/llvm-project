@@ -122,7 +122,8 @@ class CompressInstEmitter {
     Uncompress,
     CheckCompress,
     GetCompressibleRegs,
-    IsCompressibleViaReg
+    IsCompressibleViaReg,
+    IsRs1EqRdInst,
   };
   RecordKeeper &Records;
   CodeGenTarget Target;
@@ -575,7 +576,8 @@ void CompressInstEmitter::mergeCondAndCode(raw_ostream &CombinedStream,
   CondStr = CondStr.drop_front(6).drop_back(4);
   CombinedStream.indent(4) << "if (" << CondStr << ") {\n";
   CombinedStream << CodeStr;
-  if (EType != EmitterType::GetCompressibleRegs) {
+  if (EType != EmitterType::GetCompressibleRegs &&
+      EType != EmitterType::IsRs1EqRdInst) {
     CombinedStream.indent(4) << "  return true;\n";
   }
   CombinedStream.indent(4) << "} // if\n";
@@ -633,7 +635,9 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
   else if (EType == EmitterType::IsCompressibleViaReg)
     o << "\n#ifdef GEN_IS_COMPRESSIBLE_VIA_REG\n"
       << "#undef GEN_IS_COMPRESSIBLE_VIA_REG\n\n";
-
+  else if (EType == EmitterType::IsRs1EqRdInst)
+    o << "\n#ifdef GEN_IS_RS1_EQ_RD_INST\n"
+      << "#undef GEN_IS_RS1_EQ_RD_INST\n\n";
 
   if (EType == EmitterType::Compress) {
     FuncH << "static bool compressInst(MCInst &OutInst,\n";
@@ -653,6 +657,9 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
   } else if (EType == EmitterType::IsCompressibleViaReg) {
     FuncH << "static bool isCompressibleViaReg(const MCInst &MI,\n";
     FuncH.indent(25) << "const MCSubtargetInfo &STI) {\n";
+  } else if (EType == EmitterType::IsRs1EqRdInst) {
+    FuncH << "static bool isRs1EqRdInst(const MachineInstr &MI,\n";
+    FuncH.indent(25) << "const " << TargetName << "Subtarget &STI) {\n";
   }
 
   if (CompressPatterns.empty()) {
@@ -668,6 +675,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
       o << "\n#endif //GEN_GET_COMPRESSIBLE_REGS\n\n";
     else if (EType == EmitterType::IsCompressibleViaReg)
       o << "\n#endif //GEN_IS_COMPRESSIBLE_VIA_REG\n\n";
+    else if (EType == EmitterType::IsRs1EqRdInst)
+      o << "\n#endif //GEN_IS_RS1_EQ_RD_INST\n\n";
     return;
   }
 
@@ -685,7 +694,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
   bool CompressOrCheckOrGet = EType == EmitterType::Compress ||
                               EType == EmitterType::CheckCompress ||
                               EType == EmitterType::GetCompressibleRegs ||
-                              EType == EmitterType::IsCompressibleViaReg;
+                              EType == EmitterType::IsCompressibleViaReg ||
+                              EType == EmitterType::IsRs1EqRdInst;
   bool CompressOrUncompress =
       EType == EmitterType::Compress || EType == EmitterType::Uncompress;
 
@@ -701,15 +711,20 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
   case EmitterType::IsCompressibleViaReg:
     Suffix = "ViaReg";
     break;
+  case EmitterType::IsRs1EqRdInst:
+    Suffix = "Rs1EqRd";
+    break;
   default:
     Suffix = "";
   }
   ValidatorName += Suffix;
 
   for (auto &CompressPat : CompressPatterns) {
+    // TODO: Document why we skip these patterns.
     if ((EType == EmitterType::Uncompress ||
          EType == EmitterType::GetCompressibleRegs ||
-         EType == EmitterType::IsCompressibleViaReg) &&
+         EType == EmitterType::IsCompressibleViaReg ||
+         EType == EmitterType::IsRs1EqRdInst) &&
         CompressPat.IsCompressOnly)
       continue;
 
@@ -725,7 +740,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                                              : CompressPat.SourceOperandMap;
 
     if (EType == EmitterType::GetCompressibleRegs ||
-        EType == EmitterType::IsCompressibleViaReg) {
+        EType == EmitterType::IsCompressibleViaReg ||
+        EType == EmitterType::IsRs1EqRdInst) {
       if (Dest.Operands.empty())
         continue;
 
@@ -781,6 +797,26 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
       CondStream << ") &&\n";
     }
 
+    // Check if there are any rs1 = rd requirement
+    if (EType == EmitterType::IsRs1EqRdInst) {
+      bool HasRs1EqRd = false;
+      for (unsigned OpNo = 0; OpNo < Source.Operands.size(); ++OpNo) {
+        if (SourceOperandMap[OpNo].TiedOpIdx != -1) {
+          if (Source.Operands[OpNo].Rec->isSubClassOf("RegisterClass")) {
+            if (SourceOperandMap[OpNo].TiedOpIdx == 0) {
+              HasRs1EqRd = true;
+              break;
+            }
+          } else
+            PrintFatalError("Unexpected tied operand types!\n");
+        }
+      }
+      if (HasRs1EqRd)
+        CodeStream.indent(6) << "  return true;";
+      else
+        CodeStream.indent(6) << "  return false;";
+    }
+
     SmallVector<unsigned, 4> GPRCs;
 
     // Start Source Inst operands validation.
@@ -794,7 +830,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
       if (SourceOperandMap[OpNo].TiedOpIdx != -1) {
         if (Source.Operands[OpNo].Rec->isSubClassOf("RegisterClass")) {
           if (EType != EmitterType::GetCompressibleRegs &&
-              EType != EmitterType::IsCompressibleViaReg) {
+              EType != EmitterType::IsCompressibleViaReg &&
+              EType != EmitterType::IsRs1EqRdInst) {
             CondStream.indent(6)
                 << "(MI.getOperand(" << OpNo << ").isReg()) && (MI.getOperand("
                 << SourceOperandMap[OpNo].TiedOpIdx << ").isReg()) &&\n"
@@ -854,7 +891,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
           // for the operand its tied to.
           if (DestOperand.getTiedRegister() == -1) {
             if (EType != EmitterType::GetCompressibleRegs &&
-                EType != EmitterType::IsCompressibleViaReg) {
+                EType != EmitterType::IsCompressibleViaReg &&
+                EType != EmitterType::IsRs1EqRdInst) {
               CondStream.indent(6)
                   << "(MI.getOperand(" << OpIdx << ").isReg()) &&\n"
                   << "      (" << TargetName << "MCRegisterClasses["
@@ -873,7 +911,10 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                 << "OutInst.addOperand(MI.getOperand(" << OpIdx << "));\n";
         } else {
           // Handling immediate operands.
-          if (CompressOrUncompress || EType == EmitterType::IsCompressibleViaReg) {
+          // FIXME: EmitterType::GetCompressibleRegs too???
+          if (CompressOrUncompress ||
+              EType == EmitterType::IsCompressibleViaReg ||
+              EType == EmitterType::IsRs1EqRdInst) {
             unsigned Entry =
                 getPredicates(MCOpPredicateMap, MCOpPredicates, DestOperand.Rec,
                               "MCOperandPredicate");
@@ -897,7 +938,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
         break;
       }
       case OpData::Imm: {
-        if (CompressOrUncompress || EType == EmitterType::IsCompressibleViaReg) {
+        if (CompressOrUncompress ||
+            EType == EmitterType::IsCompressibleViaReg) {
           unsigned Entry = getPredicates(MCOpPredicateMap, MCOpPredicates,
                                          DestOperand.Rec, "MCOperandPredicate");
           CondStream.indent(6)
@@ -999,6 +1041,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     o << "\n#endif //GEN_GET_COMPRESSIBLE_REGS\n\n";
   else if (EType == EmitterType::IsCompressibleViaReg)
     o << "\n#endif //IsCompressibleViaReg\n\n";
+  else if (EType == EmitterType::IsRs1EqRdInst)
+    o << "\n#endif //IsRs1EqRdInst\n\n";
 }
 
 void CompressInstEmitter::run(raw_ostream &o) {
@@ -1020,6 +1064,8 @@ void CompressInstEmitter::run(raw_ostream &o) {
   emitCompressInstEmitter(o, EmitterType::GetCompressibleRegs);
   // Generate isCompressibleViaReg() function.
   emitCompressInstEmitter(o, EmitterType::IsCompressibleViaReg);
+  // Generate isRs1EqRdInst() function.
+  emitCompressInstEmitter(o, EmitterType::IsRs1EqRdInst);
 }
 
 namespace llvm {
