@@ -95,6 +95,11 @@ public:
   }
   bool enableMachineScheduler() const override { return true; }
 
+
+  bool isRdEqRs1Inst(const MachineInstr &MI) const override {
+    return RISCVRVC::isRdEqRs1Inst(MI, *this);
+  }
+
   /// Returns RISCV processor family.
   /// Avoid this function! CPU specifics should be kept local to this class
   /// and preferably modeled with SubtargetFeatures or properties in

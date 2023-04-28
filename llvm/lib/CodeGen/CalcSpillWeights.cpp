@@ -148,8 +148,9 @@ void VirtRegAuxInfo::calculateSpillWeightAndHint(LiveInterval &LI) {
 float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
                                        SlotIndex *End) {
   MachineRegisterInfo &MRI = MF.getRegInfo();
-  const TargetRegisterInfo &TRI = *MF.getSubtarget().getRegisterInfo();
-  const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+  const auto &STI = MF.getSubtarget();
+  const TargetRegisterInfo &TRI = *STI.getRegisterInfo();
+  const TargetInstrInfo &TII = *STI.getInstrInfo();
   MachineBasicBlock *MBB = nullptr;
   MachineLoop *Loop = nullptr;
   bool IsExiting = false;
@@ -262,8 +263,14 @@ float VirtRegAuxInfo::weightCalcHelper(LiveInterval &LI, SlotIndex *Start,
     // Get allocation hints from copies.
     // Copy or XOR
     // if (!MI->isCopy())
-    if (!MI->isCopy() && MI->getOpcode() != 13187 && MI->getOpcode() != 12443)
+    // if (!MI->isCopy() && MI->getOpcode() != 13187 && MI->getOpcode() !=
+    // 12443)
+    if (!MI->isCopy() && !STI.isRdEqRs1Inst(*MI))
       continue;
+
+    if (!MI->isCopy()) {
+      LLVM_DEBUG(dbgs() << *MI << " is rd=rs1\n";);
+    }
 
     bool isRs1EqRdHint = !MI->isCopy();
     HintType hintType = isRs1EqRdHint ? HintType::RS1_EQ_RD : HintType::Normal;
