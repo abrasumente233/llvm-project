@@ -204,6 +204,7 @@ unsigned RISCVVType::getSEWLMULRatio(unsigned SEW, RISCVII::VLMUL VLMul) {
 #define GEN_COMPRESS_INSTR
 #define GEN_GET_COMPRESSIBLE_REGS
 #define GEN_IS_COMPRESSIBLE_VIA_REG
+#define GEN_IS_RS1_EQ_RD_INST
 #include "RISCVGenCompressInstEmitter.inc"
 
 bool RISCVRVC::compress(MCInst &OutInst, const MCInst &MI,
@@ -217,7 +218,7 @@ bool RISCVRVC::uncompress(MCInst &OutInst, const MCInst &MI,
 }
 
 bool RISCVRVC::isInstCompressibleViaReg(const MCInst &MI,
-                                    const MCSubtargetInfo &STI) {
+                                        const MCSubtargetInfo &STI) {
   return isCompressibleViaReg(MI, STI);
 }
 
@@ -225,6 +226,11 @@ SmallVector<Register, 4>
 RISCVRVC::getCompressibleRegs(const MachineInstr &MI,
                               const RISCVSubtarget &STI) {
   return getCompressibleRegsInInst(MI, STI);
+}
+
+bool RISCVRVC::isRdEqRs1Inst(const MachineInstr &MI,
+                             const RISCVSubtarget &STI) {
+  return isRs1EqRdInst(MI, STI);
 }
 
 } // namespace llvm

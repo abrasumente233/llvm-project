@@ -602,7 +602,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                                               const CompressPat &RHS) {
     if (EType == EmitterType::Compress || EType == EmitterType::CheckCompress ||
         EType == EmitterType::GetCompressibleRegs ||
-        EType == EmitterType::IsCompressibleViaReg)
+        EType == EmitterType::IsCompressibleViaReg ||
+        EType == EmitterType::IsRs1EqRdInst)
       return (LHS.Source.TheDef->getName() < RHS.Source.TheDef->getName());
     else
       return (LHS.Dest.TheDef->getName() < RHS.Dest.TheDef->getName());
@@ -723,10 +724,10 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     // TODO: Document why we skip these patterns.
     if ((EType == EmitterType::Uncompress ||
          EType == EmitterType::GetCompressibleRegs ||
-         EType == EmitterType::IsCompressibleViaReg ||
-         EType == EmitterType::IsRs1EqRdInst) &&
-        CompressPat.IsCompressOnly)
+         EType == EmitterType::IsCompressibleViaReg) &&
+        CompressPat.IsCompressOnly) {
       continue;
+    }
 
     CodeGenInstruction &Source =
         CompressOrCheckOrGet ? CompressPat.Source : CompressPat.Dest;
@@ -742,11 +743,13 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
     if (EType == EmitterType::GetCompressibleRegs ||
         EType == EmitterType::IsCompressibleViaReg ||
         EType == EmitterType::IsRs1EqRdInst) {
-      if (Dest.Operands.empty())
+      if (Dest.Operands.empty()) {
         continue;
+      }
 
-      if (!isRISCVGRPCRegClass(Dest.Operands[0]))
+      if (!isRISCVGRPCRegClass(Dest.Operands[0])) {
         continue;
+      }
     }
 
     std::string CondString;
@@ -911,10 +914,8 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                 << "OutInst.addOperand(MI.getOperand(" << OpIdx << "));\n";
         } else {
           // Handling immediate operands.
-          // FIXME: EmitterType::GetCompressibleRegs too???
           if (CompressOrUncompress ||
-              EType == EmitterType::IsCompressibleViaReg ||
-              EType == EmitterType::IsRs1EqRdInst) {
+              EType == EmitterType::IsCompressibleViaReg) {
             unsigned Entry =
                 getPredicates(MCOpPredicateMap, MCOpPredicates, DestOperand.Rec,
                               "MCOperandPredicate");
@@ -927,7 +928,7 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
                               DestOperand.Rec, "ImmediateCode");
             CondStream.indent(6)
                 << "MI.getOperand(" << OpIdx << ").isImm() &&\n";
-            CondStream.indent(6) << TargetName << "ValidateMachineOperand("
+            CondStream.indent(6) << ValidatorName << "("
                                  << "MI.getOperand(" << OpIdx << "), &STI, "
                                  << Entry << ") &&\n";
           }
@@ -949,11 +950,9 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
         } else {
           unsigned Entry = getPredicates(ImmLeafPredicateMap, ImmLeafPredicates,
                                          DestOperand.Rec, "ImmediateCode");
-          CondStream.indent(6)
-              << TargetName
-              << "ValidateMachineOperand(MachineOperand::CreateImm("
-              << DestOperandMap[OpNo].Data.Imm << "), &STI, " << Entry
-              << ") &&\n";
+          CondStream.indent(6) << ValidatorName << "(MachineOperand::CreateImm("
+                               << DestOperandMap[OpNo].Data.Imm << "), &STI, "
+                               << Entry << ") &&\n";
         }
         if (CompressOrUncompress)
           CodeStream.indent(6) << "OutInst.addOperand(MCOperand::createImm("
@@ -1012,8 +1011,7 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
   }
 
   if (!ImmLeafPredicates.empty()) {
-    o << "static bool " << TargetName
-      << "ValidateMachineOperand(const MachineOperand &MO,\n"
+    o << "static bool " << ValidatorName << "(const MachineOperand &MO,\n"
       << "                  const " << TargetName << "Subtarget *Subtarget,\n"
       << "                  unsigned PredicateIndex) {\n"
       << "  int64_t Imm = MO.getImm();\n"
