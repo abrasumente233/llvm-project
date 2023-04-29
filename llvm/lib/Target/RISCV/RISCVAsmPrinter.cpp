@@ -212,7 +212,7 @@ bool RISCVAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "RISCVNumTriesCompressInstrsViaReg: "
                     << RISCVNumTriesCompressInstrsViaReg
                     << ", RISCVNumInstrsCompressibleViaReg: "
-                    << RISCVNumInstrsCompressibleViaReg << "\n";)
+                    << RISCVNumInstrsCompressibleViaReg << "\n");
 
   return false;
 }
