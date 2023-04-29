@@ -722,10 +722,7 @@ void CompressInstEmitter::emitCompressInstEmitter(raw_ostream &o,
 
   for (auto &CompressPat : CompressPatterns) {
     // TODO: Document why we skip these patterns.
-    if ((EType == EmitterType::Uncompress ||
-         EType == EmitterType::GetCompressibleRegs ||
-         EType == EmitterType::IsCompressibleViaReg) &&
-        CompressPat.IsCompressOnly) {
+    if ((EType == EmitterType::Uncompress) && CompressPat.IsCompressOnly) {
       continue;
     }
 
